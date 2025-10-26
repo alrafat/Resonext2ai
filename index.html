@@ -1,12 +1,157 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resonext2ai</title>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3e%3cdefs%3e%3clinearGradient id='logoGradientFavicon' x1='0' y1='0' x2='1' y2='1'%3e%3cstop offset='0%25' stop-color='%23a78bfa' /%3e%3cstop offset='100%25' stop-color='%236d28d9' /%3e%3c/linearGradient%3e%3c/defs%3e%3cpath fill='url(%23logoGradientFavicon)' d='M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z'/%3e%3c/svg%3e" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resonext.ai</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@400;500&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script>
+      // Prevents flash of unstyled content (FOUC) on theme change
+      try {
+        const theme = localStorage.getItem('theme');
+        if (theme === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (_) {}
+      
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Lora', 'serif'],
+              serifDisplay: ['Playfair Display', 'serif'],
+            },
+            colors: {
+              border: 'hsl(var(--border))',
+              input: 'hsl(var(--input))',
+              ring: 'hsl(var(--ring))',
+              background: 'hsl(var(--background))',
+              foreground: 'hsl(var(--foreground))',
+              primary: {
+                DEFAULT: 'hsl(var(--primary))',
+                foreground: 'hsl(var(--primary-foreground))',
+              },
+              secondary: {
+                DEFAULT: 'hsl(var(--secondary))',
+                foreground: 'hsl(var(--secondary-foreground))',
+              },
+              destructive: {
+                DEFAULT: 'hsl(var(--destructive))',
+                foreground: 'hsl(var(--destructive-foreground))',
+              },
+              muted: {
+                DEFAULT: 'hsl(var(--muted))',
+                foreground: 'hsl(var(--muted-foreground))',
+              },
+              accent: {
+                DEFAULT: 'hsl(var(--accent))',
+                foreground: 'hsl(var(--accent-foreground))',
+              },
+              card: {
+                DEFAULT: 'hsl(var(--card))',
+                foreground: 'hsl(var(--card-foreground))',
+              },
+            },
+            animation: {
+                'fade-in': 'fadeIn 0.5s ease-out forwards',
+            },
+            keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0', transform: 'translateY(10px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+            }
+          },
+        },
+      }
+    </script>
+<style>
+  :root {
+    --background: 240 10% 99%; /* Almost white */
+    --foreground: 240 10% 3.9%; /* Dark gray */
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 244 85% 58%; /* Indigo 500 */
+    --primary-foreground: 0 0% 100%; /* White */
+    --secondary: 240 5% 96%; /* Gray 100 */
+    --secondary-foreground: 240 6% 10%; /* Gray 900 */
+    --muted: 240 5% 93%; /* Gray 150 */
+    --muted-foreground: 240 4% 46%; /* Gray 500 */
+    --accent: 240 5% 93%; /* Gray 150 */
+    --accent-foreground: 240 6% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 6% 90%; /* Gray 200 */
+    --input: 240 6% 90%;
+    --ring: 244 85% 68%; /* Indigo 400 */
+    --radius: 0.75rem;
+  }
+ 
+  .dark {
+    --background: 224 71% 4%; /* Very dark blue */
+    --foreground: 210 40% 98%; /* Almost white */
+    --card: 224 71% 9%; /* Dark blue */
+    --card-foreground: 210 40% 98%;
+    --primary: 244 85% 68%; /* Indigo 400 */
+    --primary-foreground: 224 71% 4%;
+    --secondary: 224 71% 14%; /* Darker blue */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 224 71% 14%; /* Same as secondary */
+    --muted-foreground: 215 20% 65%; /* Light gray */
+    --accent: 224 71% 19%; /* Even darker blue */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 224 71% 19%;
+    --input: 224 71% 14%;
+    --ring: 244 85% 68%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    background-image: radial-gradient(circle at 15% 15%, hsla(var(--primary), 0.1), transparent 30%),
+                      radial-gradient(circle at 85% 85%, hsla(217, 91%, 60%, 0.1), transparent 30%);
+    background-attachment: fixed;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  .noise::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAACUSURBVHgB7dZBDQAwEASh+rcf7d1gAmzCJjOds+497/0OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgX6ZvtH7a93p5Lw4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAh20/I3bS/i15eTAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOD303aS/n5r2jYnAQAAAAAAAAAAAAAAAAAAAAAAAAAAAADAd/IC43wCS2qZbW0AAAAASUVORK5CYII=');
+    opacity: 0.03;
+    z-index: 1;
+  }
+  .glow-on-hover:hover {
+    box-shadow: 0 0 20px 0 hsla(var(--primary), 0.5);
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0"
+  }
+}
+</script>
 </head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/main.tsx"></script>
-</body>
+  <body>
+    <div id="root" class="noise"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
 </html>
