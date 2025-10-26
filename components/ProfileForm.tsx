@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { UserProfile, SampleSop, DegreeInfo } from '../types';
 import { Card } from './ui/Card';
 import { Input } from './ui/Input';
@@ -70,30 +70,36 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
   const [isExtracting, setIsExtracting] = useState(false);
   const [isExtractingSop, setIsExtractingSop] = useState<{ [key: string]: boolean }>({});
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId)!, [profiles, activeProfileId]);
+  const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
 
-  const updateActiveProfile = (updatedData: Partial<UserProfile>) => {
-    setProfiles(prev => prev.map(p => p.id === activeProfileId ? { ...p, ...updatedData } : p));
-  };
-  
+  // Local state for editing the active profile to avoid saving on every keystroke
+  const [editedProfile, setEditedProfile] = useState(activeProfile);
+
+  useEffect(() => {
+      // When the active profile changes from props, update the local editing state
+      setEditedProfile(profiles.find(p => p.id === activeProfileId));
+  }, [activeProfileId, profiles]);
+
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    updateActiveProfile({ [e.target.name]: e.target.value });
+    if (!editedProfile) return;
+    setEditedProfile({ ...editedProfile, [e.target.name]: e.target.value });
   };
   
   const handleDegreeChange = (degreeType: 'bachelor' | 'master', field: keyof DegreeInfo, value: string) => {
-    const currentDegree = activeProfile[degreeType] || { university: '', major: '', gpa: '' };
-    updateActiveProfile({
-        [degreeType]: {
-            ...currentDegree,
-            [field]: value
-        }
+    if (!editedProfile) return;
+    const currentDegree = editedProfile[degreeType] || { university: '', major: '', gpa: '' };
+    setEditedProfile({
+        ...editedProfile,
+        [degreeType]: { ...currentDegree, [field]: value }
     });
   };
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && editedProfile) {
       if (!VALID_FILE_TYPES.includes(file.type)) {
         setExtractionError("Please upload a PDF or DOCX file.");
         return;
@@ -101,27 +107,28 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
       setExtractionError(null);
       try {
         const base64String = await fileToBase64(file);
-        updateActiveProfile({ cvContent: base64String, cvFileName: file.name, cvMimeType: file.type });
+        setEditedProfile({ ...editedProfile, cvContent: base64String, cvFileName: file.name, cvMimeType: file.type });
       } catch (error) {
         console.error("Error converting file to base64", error);
         setExtractionError("Could not read the selected file.");
-        updateActiveProfile({ cvContent: '', cvFileName: '', cvMimeType: '' });
+        setEditedProfile({ ...editedProfile, cvContent: '', cvFileName: '', cvMimeType: '' });
       }
     }
   };
   
   const handleExtract = async () => {
-    if (!activeProfile.cvContent || !activeProfile.cvMimeType) {
+    if (!editedProfile || !editedProfile.cvContent || !editedProfile.cvMimeType) {
       setExtractionError("Please upload your CV (PDF or DOCX) first.");
       return;
     }
     setIsExtracting(true);
     setExtractionError(null);
     try {
-      const extractedData = await extractProfileFromCV(activeProfile.cvContent, activeProfile.cvMimeType);
-      updateActiveProfile({
+      const extractedData = await extractProfileFromCV(editedProfile.cvContent, editedProfile.cvMimeType);
+      setEditedProfile({
+        ...editedProfile,
         ...extractedData,
-        portfolio: extractedData.portfolio || activeProfile.portfolio,
+        portfolio: extractedData.portfolio || editedProfile.portfolio,
       });
     } catch (e) {
       console.error(e);
@@ -148,28 +155,31 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
   };
 
   const handleAddSampleSop = () => {
-    const currentSops = activeProfile.sampleSops || [];
+    if (!editedProfile) return;
+    const currentSops = editedProfile.sampleSops || [];
     if (currentSops.length < 3) {
       const newSop: SampleSop = { id: crypto.randomUUID(), content: '' };
-      updateActiveProfile({ sampleSops: [...currentSops, newSop] });
+      setEditedProfile({ ...editedProfile, sampleSops: [...currentSops, newSop] });
     }
   };
 
   const handleRemoveSampleSop = (id: string) => {
-    const updatedSops = (activeProfile.sampleSops || []).filter(sop => sop.id !== id);
-    updateActiveProfile({ sampleSops: updatedSops });
+    if (!editedProfile) return;
+    const updatedSops = (editedProfile.sampleSops || []).filter(sop => sop.id !== id);
+    setEditedProfile({ ...editedProfile, sampleSops: updatedSops });
   };
 
   const handleSampleSopChange = (id: string, content: string) => {
-    const updatedSops = (activeProfile.sampleSops || []).map(sop =>
+    if (!editedProfile) return;
+    const updatedSops = (editedProfile.sampleSops || []).map(sop =>
       sop.id === id ? { ...sop, content } : sop
     );
-    updateActiveProfile({ sampleSops: updatedSops });
+    setEditedProfile({ ...editedProfile, sampleSops: updatedSops });
   };
   
   const handleSampleSopFileChange = async (sopId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !editedProfile) return;
 
     if (!VALID_FILE_TYPES.includes(file.type)) {
         alert("Please upload a PDF or DOCX file.");
@@ -179,22 +189,24 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
     try {
         const base64String = await fileToBase64(file);
         
-        // Update state with file info first
-        let updatedSops = (activeProfile.sampleSops || []).map(sop => 
+        // Update local state with file info first
+        let updatedSops = (editedProfile.sampleSops || []).map(sop => 
             sop.id === sopId ? { ...sop, fileName: file.name, fileContent: base64String, fileMimeType: file.type, content: '' } : sop
         );
-        updateActiveProfile({ sampleSops: updatedSops });
+        setEditedProfile({ ...editedProfile, sampleSops: updatedSops });
         
         // Start extraction
         setIsExtractingSop(prev => ({ ...prev, [sopId]: true }));
         const extractedText = await extractTextFromFile(base64String, file.type);
 
-        // Update with extracted text
-        updatedSops = (activeProfile.sampleSops || []).map(sop => 
-            sop.id === sopId ? { ...sop, fileName: file.name, fileContent: base64String, fileMimeType: file.type, content: extractedText } : sop
-        );
-        // We need to re-find the sops from the state after the first update
-        setProfiles(prevProfiles => prevProfiles.map(p => p.id === activeProfileId ? {...p, sampleSops: p.sampleSops?.map(s => s.id === sopId ? {...s, content: extractedText} : s)} : p));
+        // Update with extracted text, making sure to get the latest version of the sops array
+        setEditedProfile(currentProfile => {
+            if (!currentProfile) return currentProfile;
+            const finalSops = (currentProfile.sampleSops || []).map(s =>
+                s.id === sopId ? {...s, content: extractedText} : s
+            );
+            return {...currentProfile, sampleSops: finalSops};
+        });
 
     } catch (error) {
         console.error("Error processing SOP file:", error);
@@ -205,14 +217,23 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
   };
 
   const handleRemoveSampleSopFile = (sopId: string) => {
-     const updatedSops = (activeProfile.sampleSops || []).map(sop =>
+     if (!editedProfile) return;
+     const updatedSops = (editedProfile.sampleSops || []).map(sop =>
       sop.id === sopId ? { ...sop, content: '', fileName: undefined, fileContent: undefined, fileMimeType: undefined } : sop
     );
-    updateActiveProfile({ sampleSops: updatedSops });
+    setEditedProfile({ ...editedProfile, sampleSops: updatedSops });
+  };
+  
+  const handleSaveProfile = () => {
+    if (editedProfile) {
+        setProfiles(prev => prev.map(p => p.id === activeProfileId ? editedProfile : p));
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+    }
   };
 
 
-  if (!activeProfile) {
+  if (!editedProfile) {
       return <Card><p>No active profile selected. Please select or create a profile.</p></Card>
   }
 
@@ -238,7 +259,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
         <hr className="border-border" />
         <div className="flex items-end gap-4">
             <div className="flex-grow">
-                 <Input label="Profile Name" name="profileName" id="profileName" value={activeProfile.profileName} onChange={handleInputChange} placeholder="e.g., AI Research Profile" />
+                 <Input label="Profile Name" name="profileName" id="profileName" value={editedProfile.profileName} onChange={handleInputChange} placeholder="e.g., AI Research Profile" />
             </div>
             <Button onClick={handleDeleteProfile} variant="secondary" className="px-3 py-2 text-sm bg-destructive/10 border-destructive/20 hover:bg-destructive/20 text-destructive" disabled={profiles.length <= 1}>
               Delete
@@ -249,7 +270,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
             <label className="block text-sm font-medium text-muted-foreground">
                 Upload CV/Resume (PDF, DOCX)
             </label>
-            {!activeProfile.cvFileName ? (
+            {!editedProfile.cvFileName ? (
                 <div 
                     className="mt-2 flex justify-center rounded-lg border border-dashed border-border px-6 py-10 hover:border-primary/50 transition cursor-pointer"
                     onClick={() => document.getElementById('cv-upload')?.click()}
@@ -273,11 +294,11 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span className="text-sm font-medium text-foreground truncate" title={activeProfile.cvFileName}>{activeProfile.cvFileName}</span>
+                        <span className="text-sm font-medium text-foreground truncate" title={editedProfile.cvFileName}>{editedProfile.cvFileName}</span>
                     </div>
                     <button
                         type="button"
-                        onClick={() => updateActiveProfile({cvFileName: '', cvContent: '', cvMimeType: ''})}
+                        onClick={() => setEditedProfile({...editedProfile, cvFileName: '', cvContent: '', cvMimeType: ''})}
                         className="text-muted-foreground hover:text-foreground transition flex-shrink-0 ml-4"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -289,7 +310,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
         </div>
         
           <div className="mt-2 flex items-center justify-between">
-            <Button onClick={handleExtract} disabled={isExtracting || !activeProfile.cvContent} variant="secondary">
+            <Button onClick={handleExtract} disabled={isExtracting || !editedProfile.cvContent} variant="secondary">
               {isExtracting ? <Spinner /> : '✨ Extract Info from CV'}
             </Button>
             <p className="text-xs text-muted-foreground text-right">
@@ -299,29 +320,29 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
           {extractionError && <p className="mt-2 text-sm text-destructive">{extractionError}</p>}
         <hr className="border-border" />
         
-        <Input label="Full Name" name="name" id="name" value={activeProfile.name} onChange={handleInputChange} placeholder="e.g., Jane Doe" />
+        <Input label="Full Name" name="name" id="name" value={editedProfile.name} onChange={handleInputChange} placeholder="e.g., Jane Doe" />
         
         <DegreeSection
             title="Bachelor's Degree"
             degreeType="bachelor"
-            degreeInfo={activeProfile.bachelor}
+            degreeInfo={editedProfile.bachelor}
             onChange={handleDegreeChange}
         />
 
         <DegreeSection
             title="Master's Degree (Optional)"
             degreeType="master"
-            degreeInfo={activeProfile.master || { university: '', major: '', gpa: '' }}
+            degreeInfo={editedProfile.master || { university: '', major: '', gpa: '' }}
             onChange={handleDegreeChange}
         />
 
-        <Textarea label="Academic Summary" name="academicSummary" id="academicSummary" value={activeProfile.academicSummary} onChange={handleInputChange} placeholder="e.g., Completed M.S. at University X and B.S. at University Y." />
-        <Textarea label="Research Interests" name="researchInterests" id="researchInterests" value={activeProfile.researchInterests} onChange={handleInputChange} placeholder="Describe your research interests in a few sentences." />
-        <Textarea label="Future Goals & Vision" name="futureGoals" id="futureGoals" value={activeProfile.futureGoals || ''} onChange={handleInputChange} placeholder="Describe your long-term academic and career aspirations after completing your graduate studies." />
-        <Textarea label="Relevant Coursework" name="relevantCoursework" id="relevantCoursework" value={activeProfile.relevantCoursework} onChange={handleInputChange} placeholder="List key courses like 'Machine Learning', 'AI Ethics', etc." />
-        <Textarea label="Relevant Work Experience" name="workExperience" id="workExperience" value={activeProfile.workExperience} onChange={handleInputChange} placeholder="Summarize key roles and accomplishments from your work experience." />
-        <Textarea label="Conference Presentations/Attendance (Optional)" name="conferences" id="conferences" value={activeProfile.conferences || ''} onChange={handleInputChange} placeholder="e.g., Presented at NeurIPS 2023, Attended CVPR 2022." />
-        <Input label="Personal Website / Portfolio URL (Optional)" name="portfolio" id="portfolio" value={activeProfile.portfolio} onChange={handleInputChange} placeholder="https://your-portfolio.com" />
+        <Textarea label="Academic Summary" name="academicSummary" id="academicSummary" value={editedProfile.academicSummary} onChange={handleInputChange} placeholder="e.g., Completed M.S. at University X and B.S. at University Y." />
+        <Textarea label="Research Interests" name="researchInterests" id="researchInterests" value={editedProfile.researchInterests} onChange={handleInputChange} placeholder="Describe your research interests in a few sentences." />
+        <Textarea label="Future Goals & Vision" name="futureGoals" id="futureGoals" value={editedProfile.futureGoals || ''} onChange={handleInputChange} placeholder="Describe your long-term academic and career aspirations after completing your graduate studies." />
+        <Textarea label="Relevant Coursework" name="relevantCoursework" id="relevantCoursework" value={editedProfile.relevantCoursework} onChange={handleInputChange} placeholder="List key courses like 'Machine Learning', 'AI Ethics', etc." />
+        <Textarea label="Relevant Work Experience" name="workExperience" id="workExperience" value={editedProfile.workExperience} onChange={handleInputChange} placeholder="Summarize key roles and accomplishments from your work experience." />
+        <Textarea label="Conference Presentations/Attendance (Optional)" name="conferences" id="conferences" value={editedProfile.conferences || ''} onChange={handleInputChange} placeholder="e.g., Presented at NeurIPS 2023, Attended CVPR 2022." />
+        <Input label="Personal Website / Portfolio URL (Optional)" name="portfolio" id="portfolio" value={editedProfile.portfolio} onChange={handleInputChange} placeholder="https://your-portfolio.com" />
         
         <hr className="border-border" />
         
@@ -329,7 +350,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
           label="Your Demo SOP for Style Reference (Optional)" 
           name="demoSop" 
           id="demoSop" 
-          value={activeProfile.demoSop || ''} 
+          value={editedProfile.demoSop || ''} 
           onChange={handleInputChange} 
           placeholder="Paste an old SOP of yours here. The AI will learn your personal writing style and tone for authenticity." 
           rows={6}
@@ -339,7 +360,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
             <label className="block text-sm font-medium text-muted-foreground mb-2">Sample Best SOPs for Style Reference (Optional)</label>
             <p className="text-xs text-muted-foreground mb-3">Add 1-3 examples of high-quality SOPs by uploading a PDF/DOCX. The AI will extract the text and learn their structure and tone.</p>
             <div className="space-y-4">
-                {(activeProfile.sampleSops || []).map((sop, index) => (
+                {(editedProfile.sampleSops || []).map((sop, index) => (
                     <div key={sop.id} className="relative p-4 bg-secondary/50 border border-border rounded-lg">
                         <div className="flex justify-between items-center mb-3">
                             <h4 className="text-sm font-semibold text-muted-foreground">Sample SOP {index + 1}</h4>
@@ -396,12 +417,17 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
                         </div>
                     </div>
                 ))}
-                {(activeProfile.sampleSops || []).length < 3 && (
+                {(editedProfile.sampleSops || []).length < 3 && (
                     <Button variant="secondary" onClick={handleAddSampleSop} className="text-sm">
                         + Add Another Sample SOP
                     </Button>
                 )}
             </div>
+        </div>
+        <div className="mt-8 pt-6 border-t border-border flex justify-end">
+            <Button onClick={handleSaveProfile} variant="primary" glow>
+                {saveSuccess ? "✓ Saved!" : "Save Profile"}
+            </Button>
         </div>
       </div>
     </Card>

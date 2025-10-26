@@ -1,9 +1,9 @@
 import React from 'react';
-import type { AppView } from '../types';
+import type { AppView, UserAccount } from '../types';
 import { Button } from './ui/Button';
 
 interface HeaderProps {
-  currentUser: string | null;
+  currentUser: UserAccount | null;
   onLogout: () => void;
   setActiveView: (view: AppView) => void;
   theme: 'light' | 'dark';
@@ -53,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, setActive
           </button>
           {currentUser && (
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <span className="text-sm text-muted-foreground hidden sm:block">{currentUser}</span>
+              <span className="text-sm text-muted-foreground hidden sm:block">{currentUser.fullName}</span>
               <ThemeSwitcher theme={theme} setTheme={setTheme} />
               <Button onClick={onLogout} variant="secondary" className="px-4 py-2 text-sm">
                 Logout

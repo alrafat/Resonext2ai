@@ -156,3 +156,19 @@ export interface SavedProgram extends ProgramDetails {
     deadline?: string;
     notes?: string;
 }
+
+// New types for authentication and user data storage
+export interface UserData {
+  profiles: UserProfile[];
+  activeProfileId: string | null;
+  savedProfessors: SavedProfessor[];
+  savedPrograms: SavedProgram[];
+  sops: Sop[];
+}
+
+export interface UserAccount {
+  id: string; // email
+  fullName: string;
+  password: string; // In a real app, this would be a hash
+  data: UserData;
+}
