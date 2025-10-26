@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { findMatchingUniversities, findMatchingProfessors, generateResearchInterestSuggestions } from '../services/geminiService';
+import { findMatchingUniversities, findMatchingProfessors } from '../services/geminiService';
 import type { UserProfile, University, ProfessorRecommendation, TieredUniversities, SuggestedPaper, ProfessorProfile } from '../types';
 import { Card } from './ui/Card';
 import { Input } from './ui/Input';
@@ -94,48 +94,6 @@ export const DiscoveryTab: React.FC<DiscoveryTabProps> = (props) => {
     // State for university tier filters
     const [tierFilters, setTierFilters] = useState<Set<'high' | 'medium' | 'low'>>(new Set(['high', 'medium', 'low']));
     
-    // State for AI-powered interest suggestions
-    const [interestSuggestions, setInterestSuggestions] = useState<string[]>([]);
-    const [isInterestSuggestionsLoading, setIsInterestSuggestionsLoading] = useState(false);
-    
-    const fetchKeywords = async (forceRefresh = false) => {
-        if (!searchProfile) return;
-
-        const cacheKey = `interest_suggestions_${searchProfile.id}`;
-        if (!forceRefresh) {
-            const cachedSuggestions = localStorage.getItem(cacheKey);
-            if (cachedSuggestions) {
-                setInterestSuggestions(JSON.parse(cachedSuggestions));
-                return;
-            }
-        }
-        
-        setIsInterestSuggestionsLoading(true);
-        setError(null);
-        try {
-            const suggestions = await generateResearchInterestSuggestions(searchProfile);
-            setInterestSuggestions(suggestions);
-            localStorage.setItem(cacheKey, JSON.stringify(suggestions));
-        } catch (e: any) {
-            console.error("Failed to get interest suggestions:", e);
-        } finally {
-            setIsInterestSuggestionsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchKeywords();
-    }, [searchProfile]);
-
-    const handleInterestSuggestionClick = (suggestion: string) => {
-        // FIX: Changed to direct state update instead of functional update, as the prop type doesn't support it.
-        const keywords = interestQuery ? interestQuery.split(',').map(k => k.trim()).filter(Boolean) : [];
-        if (!keywords.some(k => k.toLowerCase() === suggestion.toLowerCase())) {
-            keywords.push(suggestion);
-        }
-        setInterestQuery(keywords.join(', '));
-    };
-
 
     const handleTierFilterChange = (tier: 'high' | 'medium' | 'low') => {
         setTierFilters(prev => {
@@ -374,40 +332,6 @@ export const DiscoveryTab: React.FC<DiscoveryTabProps> = (props) => {
                                     onChange={(e) => setInterestQuery(e.target.value)}
                                     placeholder="e.g., Artificial Intelligence"
                                 />
-                                {(isInterestSuggestionsLoading || interestSuggestions.length > 0) && (
-                                    <div className="mt-2">
-                                        {isInterestSuggestionsLoading ? (
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Spinner />
-                                                <span>Getting AI suggestions...</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-wrap gap-2 items-center">
-                                                <div className="flex flex-wrap gap-2 flex-grow">
-                                                {interestSuggestions.map(s => (
-                                                    <button
-                                                        key={s}
-                                                        type="button"
-                                                        onClick={() => handleInterestSuggestionClick(s)}
-                                                        className="px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full hover:bg-accent transition"
-                                                    >
-                                                        + {s}
-                                                    </button>
-                                                ))}
-                                                </div>
-                                                <button 
-                                                    onClick={() => fetchKeywords(true)} 
-                                                    className="p-1.5 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                                                    title="Refresh suggestions"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m-4.991-2.691V5.006h-4.992v.001M21.015 4.356v4.992m0 0h-4.992m4.992 0l-3.181-3.183a8.25 8.25 0 00-11.667 0L2.985 9.348z" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
                             </div>
                             <div className="pt-2">
                                 <Button onClick={() => handleFindProfessors(universityQuery)} disabled={isLoading || !universityQuery} className="w-full" variant="primary">

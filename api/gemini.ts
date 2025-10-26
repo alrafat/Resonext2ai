@@ -61,12 +61,6 @@ export default async function handler(req: any, res: any) {
             case 'findMatchingProfessors':
                 result = await findMatchingProfessors(ai, payload);
                 break;
-            case 'generateResearchInterestSuggestions':
-                result = await generateResearchInterestSuggestions(ai, payload);
-                break;
-            case 'generateProgramKeywordSuggestions':
-                result = await generateProgramKeywordSuggestions(ai, payload);
-                break;
             case 'findProgramsForSpecificUniversity':
                 result = await findProgramsForSpecificUniversity(ai, payload);
                 break;
@@ -99,20 +93,40 @@ async function extractTextFromFile(ai: GoogleGenAI, { fileContent, mimeType }: {
 
 async function extractProfileFromCV(ai: GoogleGenAI, { cvContent, cvMimeType }: { cvContent: string; cvMimeType: string; }) {
     const model = 'gemini-2.5-pro';
-    const textPart = { text: `Extract the following information from the provided CV. ... Return the information in a single JSON object.` };
+    const prompt = `
+      Extract the following information from the provided CV.
+      - Full Name
+      - Bachelor's degree details (university, major, GPA)
+      - Master's degree details (if present)
+      - A concise one-paragraph academic summary.
+      - A summary of research interests.
+      - A comma-separated list of relevant coursework.
+      - A summary of relevant work experience.
+      - A summary of any conference presentations or attendance.
+      - The URL to a personal website or portfolio, if available.
+      - A summary of future goals or academic vision.
+      
+      IMPORTANT: Your response MUST be a single, raw JSON object. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json. The entire output must be parsable JSON.
+      If a field is not found, return an empty string "" for it. For degrees, if not found, return an object with empty strings.
+      
+      The JSON object must follow this exact structure:
+      {
+        "name": "...",
+        "bachelor": { "university": "...", "major": "...", "gpa": "..." },
+        "master": { "university": "...", "major": "...", "gpa": "..." },
+        "academicSummary": "...",
+        "researchInterests": "...",
+        "relevantCoursework": "...",
+        "workExperience": "...",
+        "conferences": "...",
+        "portfolio": "...",
+        "futureGoals": "..."
+      }
+    `;
     const cvPart = { inlineData: { mimeType: cvMimeType, data: cvContent } };
-    const degreeSchema = { type: Type.OBJECT, properties: { university: { type: Type.STRING }, major: { type: Type.STRING }, gpa: { type: Type.STRING } }, required: ["university", "major", "gpa"] };
     const response = await ai.models.generateContent({
         model,
-        contents: { parts: [textPart, cvPart] },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: { name: { type: Type.STRING }, bachelor: degreeSchema, master: degreeSchema, academicSummary: { type: Type.STRING }, researchInterests: { type: Type.STRING }, relevantCoursework: { type: Type.STRING }, workExperience: { type: Type.STRING }, conferences: { type: Type.STRING }, portfolio: { type: Type.STRING }, futureGoals: { type: Type.STRING } },
-                required: ["name", "bachelor", "master", "academicSummary", "researchInterests", "relevantCoursework", "workExperience", "conferences", "portfolio", "futureGoals"]
-            }
-        }
+        contents: { parts: [{ text: prompt }, cvPart] },
     });
     return parseJsonFromResponse<Partial<UserProfile>>(response.text);
 }
@@ -179,7 +193,21 @@ async function regenerateSop(ai: GoogleGenAI, { userProfile, originalSop, prompt
 
 async function findMatchingUniversities(ai: GoogleGenAI, { userProfile, country, state }: { userProfile: UserProfile; country: string; state?: string; }) {
     const model = 'gemini-2.5-pro';
-    let prompt = `You are an expert academic research assistant...`; // Full prompt omitted for brevity
+    const prompt = `
+        You are an expert academic research assistant. Your task is to use Google Search to find universities that are a good match for the provided student's profile in a specific country.
+        Student Profile: ${JSON.stringify(userProfile, null, 2)}
+        Country: ${country}
+        ${state ? `State/Province: ${state}` : ''}
+        Based on the student's research interests, GPA, and academic background, categorize top universities into three tiers: 'highTier' (ambitious, top-ranked), 'mediumTier' (good match), and 'lowTier' (safer options).
+        IMPORTANT: Your response MUST be a single, raw JSON object. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json. The entire output must be parsable JSON.
+        The JSON object must follow this exact structure:
+        {
+          "highTier": [ { "name": "University Name", "country": "${country}", "usNewsRanking": "Ranking String", "qsRanking": "Ranking String" } ],
+          "mediumTier": [ { "name": "University Name", "country": "${country}", "usNewsRanking": "Ranking String", "qsRanking": "Ranking String" } ],
+          "lowTier": [ { "name": "University Name", "country": "${country}", "usNewsRanking": "Ranking String", "qsRanking": "Ranking String" } ]
+        }
+        If a ranking is not available, use "Not Ranked".
+    `;
     const response = await ai.models.generateContent({ model, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
     const result = parseJsonFromResponse<TieredUniversities>(response.text);
     result.groundingSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -188,7 +216,35 @@ async function findMatchingUniversities(ai: GoogleGenAI, { userProfile, country,
 
 async function findMatchingProfessors(ai: GoogleGenAI, { userProfile, universityName, department, researchInterest, existingProfessors }: { userProfile: UserProfile; universityName: string; department?: string; researchInterest?: string; existingProfessors?: ProfessorRecommendation[]; }) {
     const model = 'gemini-2.5-pro';
-    let prompt = `You are an expert academic research assistant...`; // Full prompt omitted for brevity
+    const prompt = `
+        You are an expert academic research assistant. Your task is to use Google Search to find professors at a specific university whose research aligns with the student's profile.
+        Student Profile: ${JSON.stringify(userProfile, null, 2)}
+        University: ${universityName}
+        ${department ? `Department: ${department}` : ''}
+        ${researchInterest ? `Specific Research Interest: ${researchInterest}` : ''}
+        ${existingProfessors && existingProfessors.length > 0 ? `Exclude these professors from the results: ${existingProfessors.map(p => p.name).join(', ')}` : ''}
+        Find relevant professors. For each professor, find their name, designation (e.g., 'Professor', 'Assistant Professor'), department, official university email, lab website URL, and provide a concise summary of their research. Also, suggest 1-2 recent, relevant papers with their titles and public links if available.
+        IMPORTANT: Your response MUST be a single, raw JSON object. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json. The entire output must be parsable JSON.
+        The JSON object must follow this exact structure:
+        {
+          "professors": [
+            {
+              "id": "unique-id-string",
+              "name": "Professor Name",
+              "university": "${universityName}",
+              "department": "Professor's Department",
+              "designation": "Professor's Title",
+              "researchSummary": "Concise summary of research.",
+              "labWebsite": "URL",
+              "email": "professor@email.com",
+              "suggestedPapers": [
+                { "title": "Paper Title", "link": "URL to paper" }
+              ]
+            }
+          ]
+        }
+        Generate a unique ID for each professor, for example by combining their name and university.
+    `;
     const response = await ai.models.generateContent({ model, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
     const result = parseJsonFromResponse<UniversityRecommendation>(response.text);
     result.groundingSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -198,35 +254,40 @@ async function findMatchingProfessors(ai: GoogleGenAI, { userProfile, university
     return result;
 }
 
-async function generateResearchInterestSuggestions(ai: GoogleGenAI, { userProfile }: { userProfile: UserProfile; }) {
-    const model = 'gemini-2.5-flash';
-    const prompt = `Based on the following student profile, suggest 5-7 concise keywords...`; // Full prompt omitted for brevity
-    const response = await ai.models.generateContent({
-        model, contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: { type: Type.OBJECT, properties: { keywords: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["keywords"] }
-        }
-    });
-    return parseJsonFromResponse<{ keywords: string[] }>(response.text);
-}
-
-async function generateProgramKeywordSuggestions(ai: GoogleGenAI, { userProfile }: { userProfile: UserProfile; }) {
-    const model = 'gemini-2.5-flash';
-    const prompt = `Based on the following student profile, suggest 5-7 concise keywords...`; // Full prompt omitted for brevity
-    const response = await ai.models.generateContent({
-        model, contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: { type: Type.OBJECT, properties: { keywords: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["keywords"] }
-        }
-    });
-    return parseJsonFromResponse<{ keywords: string[] }>(response.text);
-}
-
 async function findProgramsForSpecificUniversity(ai: GoogleGenAI, { userProfile, universityName, keywords }: { userProfile: UserProfile; universityName: string; keywords?: string; }) {
     const model = 'gemini-2.5-pro';
-    const prompt = `You are an expert academic advisor...`; // Full prompt omitted for brevity
+    const prompt = `
+        You are an expert academic advisor for international students. Your task is to use Google Search to find relevant graduate programs (Master's or PhD) at a specific university that match a student's profile.
+        Student Profile: ${JSON.stringify(userProfile, null, 2)}
+        University: ${universityName}
+        ${keywords ? `Keywords: ${keywords}` : ''}
+        For the given university, find specific programs that align with the student's background. For each program, provide its name, degree type, a brief explanation of its relevance, key application requirements (IELTS, TOEFL, GRE/GMAT, GPA), application fee, deadlines for different intakes, and direct links to the program and application pages.
+        IMPORTANT: Your response MUST be a single, raw JSON object. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json. The entire output must be parsable JSON.
+        The JSON object must follow this exact structure:
+        {
+          "universityName": "${universityName}",
+          "usNewsRanking": "Ranking String",
+          "qsRanking": "Ranking String",
+          "recommendedPrograms": [
+            {
+              "programName": "Program Name",
+              "degreeType": "e.g., MSc, PhD",
+              "fieldRelevance": "Why this program is a good fit.",
+              "applicationRequirements": {
+                "ielts": "Score or N/A",
+                "toefl": "Score or N/A",
+                "greGmat": "Required/Optional/Not Required",
+                "gpaRequirement": "e.g., 3.0/4.0"
+              },
+              "applicationFee": "e.g., $150 USD",
+              "applicationDeadlines": [ { "intake": "e.g., Fall 2025", "deadline": "e.g., 2024-12-15" } ],
+              "programLink": "URL",
+              "applicationLink": "URL"
+            }
+          ]
+        }
+        If information is not found, use "Not specified" or "N/A".
+    `;
     const response = await ai.models.generateContent({ model, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
     const result = parseJsonFromResponse<{ universityName: string, usNewsRanking: string, qsRanking: string, recommendedPrograms: any[] }>(response.text);
     const groundingSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -235,7 +296,40 @@ async function findProgramsForSpecificUniversity(ai: GoogleGenAI, { userProfile,
 
 async function findProgramsBroadly(ai: GoogleGenAI, { userProfile, country, existingUniversities, keywords, state }: { userProfile: UserProfile; country?: string; existingUniversities?: UniversityWithPrograms[]; keywords?: string; state?: string; }) {
     const model = 'gemini-2.5-pro';
-    let prompt = `You are an expert academic advisor...`; // Full prompt omitted for brevity
+    const prompt = `
+        You are an expert academic advisor for international students. Your task is to use Google Search to find universities and relevant graduate programs that match a student's profile, focusing on a specific country or region.
+        Student Profile: ${JSON.stringify(userProfile, null, 2)}
+        ${country ? `Country: ${country}` : 'Focus on global results, primarily in North America and Europe.'}
+        ${state ? `State/Province: ${state}` : ''}
+        ${keywords ? `Keywords: ${keywords}` : ''}
+        ${existingUniversities && existingUniversities.length > 0 ? `Exclude these universities from the results: ${existingUniversities.map(u => u.universityName).join(', ')}` : ''}
+        Identify 3-5 suitable universities. For each university, find 1-2 relevant programs. Provide details for each program as specified in the schema below. Also categorize each university as 'high', 'medium', or 'low' tier based on rankings and fit for the student.
+        IMPORTANT: Your response MUST be a single, raw JSON object. Do not include any introductory text, explanations, or markdown formatting like \`\`\`json. The entire output must be parsable JSON.
+        The JSON object must follow this exact structure:
+        {
+          "universities": [
+            {
+              "universityName": "University Name",
+              "usNewsRanking": "Ranking String",
+              "qsRanking": "Ranking String",
+              "tier": "high",
+              "recommendedPrograms": [
+                {
+                  "programName": "Program Name",
+                  "degreeType": "e.g., MSc, PhD",
+                  "fieldRelevance": "Why this program is a good fit.",
+                  "applicationRequirements": { "ielts": "Score or N/A", "toefl": "Score or N/A", "greGmat": "Required/Optional/Not Required", "gpaRequirement": "e.g., 3.0/4.0" },
+                  "applicationFee": "e.g., $150 USD",
+                  "applicationDeadlines": [ { "intake": "e.g., Fall 2025", "deadline": "e.g., 2024-12-15" } ],
+                  "programLink": "URL",
+                  "applicationLink": "URL"
+                }
+              ]
+            }
+          ]
+        }
+        If information is not found, use "Not specified" or "N/A".
+    `;
     const response = await ai.models.generateContent({ model, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
     const result = parseJsonFromResponse<ProgramDiscoveryResult>(response.text);
     const groundingSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;

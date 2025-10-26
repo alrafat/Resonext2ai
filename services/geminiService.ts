@@ -57,16 +57,6 @@ export const findMatchingProfessors = async (userProfile: UserProfile, universit
     return callApi<UniversityRecommendation>('findMatchingProfessors', { userProfile, universityName, department, researchInterest, existingProfessors });
 };
 
-export const generateResearchInterestSuggestions = async (userProfile: UserProfile): Promise<string[]> => {
-    const result = await callApi<{ keywords: string[] }>('generateResearchInterestSuggestions', { userProfile });
-    return result.keywords;
-};
-
-export const generateProgramKeywordSuggestions = async (userProfile: UserProfile): Promise<string[]> => {
-    const result = await callApi<{ keywords: string[] }>('generateProgramKeywordSuggestions', { userProfile });
-    return result.keywords;
-};
-
 export const findProgramsForSpecificUniversity = async (userProfile: UserProfile, universityName: string, keywords?: string): Promise<ProgramDiscoveryResult> => {
     return callApi<ProgramDiscoveryResult>('findProgramsForSpecificUniversity', { userProfile, universityName, keywords });
 };

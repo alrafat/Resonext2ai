@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { UserProfile, ProgramDiscoveryResult, ProgramDetails, UniversityWithPrograms } from '../types';
-import { generateProgramKeywordSuggestions } from '../services/geminiService';
 import { Card } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -311,37 +310,6 @@ export const ProgramDiscoveryTab: React.FC<ProgramDiscoveryTabProps> = ({ profil
     const [searchProfileId, setSearchProfileId] = useState(activeProfileId);
     const searchProfile = useMemo(() => profiles.find(p => p.id === searchProfileId)!, [profiles, searchProfileId]);
     const [programKeywords, setProgramKeywords] = useState('');
-    const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([]);
-    const [isKeywordsLoading, setIsKeywordsLoading] = useState(false);
-
-    const fetchKeywords = async (forceRefresh = false) => {
-        if (!searchProfile) return;
-
-        const cacheKey = `program_suggestions_${searchProfile.id}`;
-        if (!forceRefresh) {
-            const cachedSuggestions = localStorage.getItem(cacheKey);
-            if (cachedSuggestions) {
-                setKeywordSuggestions(JSON.parse(cachedSuggestions));
-                return;
-            }
-        }
-        
-        setIsKeywordsLoading(true);
-        setError(null);
-        try {
-            const suggestions = await generateProgramKeywordSuggestions(searchProfile);
-            setKeywordSuggestions(suggestions);
-            localStorage.setItem(cacheKey, JSON.stringify(suggestions));
-        } catch (e: any) {
-            console.error("Failed to get keyword suggestions:", e);
-        } finally {
-            setIsKeywordsLoading(false);
-        }
-    };
-    
-    useEffect(() => {
-        fetchKeywords();
-    }, [searchProfile]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -360,16 +328,6 @@ export const ProgramDiscoveryTab: React.FC<ProgramDiscoveryTabProps> = ({ profil
     const handleLoadMore = () => {
         setError(null);
         onLoadMoreProgramsBroadly(countryQuery, searchProfile, programKeywords);
-    };
-
-    const handleSuggestionClick = (suggestion: string) => {
-        setProgramKeywords(prev => {
-            const keywords = prev ? prev.split(',').map(k => k.trim()).filter(Boolean) : [];
-            if (!keywords.some(k => k.toLowerCase() === suggestion.toLowerCase())) {
-                keywords.push(suggestion);
-            }
-            return keywords.join(', ');
-        });
     };
 
     return (
@@ -431,41 +389,6 @@ export const ProgramDiscoveryTab: React.FC<ProgramDiscoveryTabProps> = ({ profil
                             onChange={e => setProgramKeywords(e.target.value)}
                             placeholder="e.g., AI, Data Science, HCI"
                         />
-                         {(isKeywordsLoading || keywordSuggestions.length > 0) && (
-                            <div className="mt-2">
-                                {isKeywordsLoading ? (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Spinner />
-                                        <span>Getting AI suggestions...</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                        <div className="flex flex-wrap gap-2 flex-grow">
-                                            {keywordSuggestions.map(s => (
-                                                <button
-                                                    key={s}
-                                                    type="button"
-                                                    onClick={() => handleSuggestionClick(s)}
-                                                    className="px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full hover:bg-accent transition"
-                                                >
-                                                    + {s}
-                                                </button>
-                                            ))}
-                                        </div>
-                                         <button 
-                                            onClick={() => fetchKeywords(true)} 
-                                            type="button"
-                                            className="p-1.5 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                                            title="Refresh suggestions"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m-4.991-2.691V5.006h-4.992v.001M21.015 4.356v4.992m0 0h-4.992m4.992 0l-3.181-3.183a8.25 8.25 0 00-11.667 0L2.985 9.348z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </div>
 
                     <div className="pt-2">
