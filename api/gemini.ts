@@ -27,11 +27,11 @@ export default async function handler(req: any, res: any) {
     try {
         const { action, payload } = req.body;
 
-        if (!process.env.API_KEY) {
-            throw new Error("API_KEY environment variable is not set.");
+        if (!process.env.resonextaicopy) {
+            throw new Error("resonextaicopy environment variable is not set.");
         }
 
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.resonextaicopy });
 
         let result;
 
