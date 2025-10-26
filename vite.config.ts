@@ -10,7 +10,12 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'build',
     },
-    // The API_KEY is injected by the execution environment (e.g., Google AI Studio, Vercel).
-    // No explicit 'define' block is needed here.
+    // Vercel (and other platforms) provides environment variables during the build process.
+    // This `define` block makes the API_KEY available on `process.env` in the client-side code
+    // by replacing `process.env.API_KEY` with its value at build time.
+    // Make sure you have set the API_KEY environment variable in your Vercel project settings.
+    define: {
+        'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    }
   };
 });
