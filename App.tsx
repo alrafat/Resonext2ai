@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserAccount, UserData } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -110,13 +111,6 @@ function App() {
             setSavedProfessors(userData.savedProfessors || []);
             setSavedPrograms(userData.savedPrograms || []);
             setSops(userData.sops || []);
-        } else {
-            // Clear all data on logout
-            setProfiles([]);
-            setActiveProfileId(null);
-            setSavedProfessors([]);
-            setSavedPrograms([]);
-            setSops([]);
         }
         // Use a timeout to ensure state updates are batched and finished before allowing saving.
         // This prevents race conditions on login/logout.
