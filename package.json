@@ -1,22 +1,19 @@
 {
-  "name": "resonext-ai",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "resonext2ai",
+  "version": "1.0.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "@google/genai": "^1.27.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@google/genai": "^1.27.0",
+    "tailwindcss": "^4.1.16"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.1.0",
-    "typescript": "^5.8.2",
-    "vite": "^7.1.12"
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^3.0.0"
   }
 }
