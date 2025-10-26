@@ -2,7 +2,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { UserProfile, ProfessorProfile, AnalysisResult, TieredUniversities, UniversityRecommendation, ProfessorRecommendation, SavedProfessor, SuggestedPaper, ProgramDiscoveryResult, DegreeInfo, UniversityWithPrograms } from '../types';
 
 // Per instructions, API key is in environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// FIX: Use process.env.API_KEY as per the coding guidelines for accessing the API key.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * A helper function to safely parse JSON from a model response.
