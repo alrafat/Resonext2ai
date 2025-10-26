@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'build',
     },
-    // REMOVED: The 'define' block for process.env.API_KEY is no longer needed
-    // as the API key will be handled securely in a serverless function.
+    // The API_KEY is injected by the execution environment (e.g., Google AI Studio, Vercel).
+    // No explicit 'define' block is needed here.
   };
 });

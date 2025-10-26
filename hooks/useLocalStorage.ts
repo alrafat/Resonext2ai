@@ -1,31 +1,30 @@
 import React, { useState, useEffect } from 'react';
 
 export function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [storedValue, setStoredValue] = useState<T>(initialValue);
-
-  useEffect(() => {
+  // Use a lazy initializer for useState to read from localStorage only once.
+  // This prevents the infinite loop caused by re-creating initialValue arrays/objects on each render.
+  const [storedValue, setStoredValue] = useState<T>(() => {
     try {
-      const item = window.localStorage.getItem(key);
-      // If an item is found, parse it. Otherwise, reset to the initialValue for this key.
-      setStoredValue(item ? JSON.parse(item) : initialValue);
+      if (typeof window !== 'undefined') {
+        const item = window.localStorage.getItem(key);
+        return item ? JSON.parse(item) : initialValue;
+      }
     } catch (error) {
       console.error(`Error reading localStorage key “${key}”:`, error);
-      setStoredValue(initialValue);
     }
-    // FIX: Added initialValue to the dependency array to adhere to React hooks best practices.
-  }, [key, initialValue]);
+    return initialValue;
+  });
 
-  const setValue: React.Dispatch<React.SetStateAction<T>> = (value) => {
+  // Use useEffect to update localStorage whenever the state changes.
+  useEffect(() => {
     try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        window.localStorage.setItem(key, JSON.stringify(storedValue));
       }
     } catch (error) {
       console.error(`Error setting localStorage key “${key}”:`, error);
     }
-  };
+  }, [key, storedValue]);
 
-  return [storedValue, setValue];
+  return [storedValue, setStoredValue];
 }

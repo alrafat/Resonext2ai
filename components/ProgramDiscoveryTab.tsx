@@ -150,7 +150,7 @@ const UniversityAccordion: React.FC<{
                          const isSaved = savedProgramIds.has(programId);
                         return (
                            <ProgramCard 
-                                key={index}
+                                key={programId}
                                 program={program}
                                 universityName={uni.universityName}
                                 isSaved={isSaved}
