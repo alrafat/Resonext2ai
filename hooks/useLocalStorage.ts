@@ -12,7 +12,8 @@ export function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dis
       console.error(`Error reading localStorage key “${key}”:`, error);
       setStoredValue(initialValue);
     }
-  }, [key]);
+    // FIX: Added initialValue to the dependency array to adhere to React hooks best practices.
+  }, [key, initialValue]);
 
   const setValue: React.Dispatch<React.SetStateAction<T>> = (value) => {
     try {

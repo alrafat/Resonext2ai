@@ -128,7 +128,7 @@ export const DiscoveryTab: React.FC<DiscoveryTabProps> = (props) => {
     }, [searchProfile]);
 
     const handleInterestSuggestionClick = (suggestion: string) => {
-        // FIX: Changed to direct state update instead of functional update to match prop type.
+        // FIX: Changed to direct state update instead of functional update, as the prop type doesn't support it.
         const keywords = interestQuery ? interestQuery.split(',').map(k => k.trim()).filter(Boolean) : [];
         if (!keywords.some(k => k.toLowerCase() === suggestion.toLowerCase())) {
             keywords.push(suggestion);
