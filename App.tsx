@@ -419,7 +419,7 @@ function App() {
                 </div>
             )}
             <Header 
-              currentUserFullName={session?.user?.user_metadata?.fullName}
+              currentUserFullName={session?.user?.user_metadata?.full_name}
               onLogout={handleLogout} 
               setActiveView={setActiveView} 
               theme={theme}
