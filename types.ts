@@ -152,4 +152,7 @@ export interface ProgramDiscoveryResult {
 export interface SavedProgram extends ProgramDetails {
     id: string;
     universityName: string;
+    applicationStatus?: 'Not Started' | 'In Progress' | 'Submitted' | 'Accepted' | 'Rejected' | 'Waitlisted';
+    deadline?: string;
+    notes?: string;
 }

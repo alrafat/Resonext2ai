@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { SavedProfessor, SavedProgram } from '../types';
 import { Card } from './ui/Card';
@@ -300,7 +301,49 @@ const ProfessorsView: React.FC<{
 
 
 // --- Saved Program Components ---
-const SavedProgramCard: React.FC<{program: SavedProgram; onDelete: (id: string) => void;}> = ({ program, onDelete }) => {
+const SavedProgramCard: React.FC<{
+    program: SavedProgram;
+    onUpdate: (program: SavedProgram) => void;
+    onDelete: (id: string) => void;
+}> = ({ program, onUpdate, onDelete }) => {
+    const [notes, setNotes] = useState(program.notes || '');
+    const [deadline, setDeadline] = useState(program.deadline || '');
+    const [status, setStatus] = useState(program.applicationStatus || 'Not Started');
+
+    useEffect(() => {
+        setNotes(program.notes || '');
+        setDeadline(program.deadline || '');
+        setStatus(program.applicationStatus || 'Not Started');
+    }, [program]);
+
+    const handleNotesBlur = () => {
+        if (notes !== (program.notes || '')) {
+            onUpdate({ ...program, notes });
+        }
+    };
+
+    const handleDeadlineChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newDeadline = e.target.value;
+        setDeadline(newDeadline);
+        onUpdate({ ...program, deadline: newDeadline });
+    };
+
+    const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newStatus = e.target.value as NonNullable<SavedProgram['applicationStatus']>;
+        setStatus(newStatus);
+        onUpdate({ ...program, applicationStatus: newStatus });
+    };
+    
+    const statusOptions: NonNullable<SavedProgram['applicationStatus']>[] = ['Not Started', 'In Progress', 'Submitted', 'Accepted', 'Rejected', 'Waitlisted'];
+    const statusColors: Record<NonNullable<SavedProgram['applicationStatus']>, string> = {
+        'Not Started': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+        'In Progress': 'bg-sky-500/10 text-sky-400 border-sky-500/20',
+        'Submitted': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+        'Accepted': 'bg-green-500/10 text-green-400 border-green-500/20',
+        'Rejected': 'bg-red-500/10 text-red-400 border-red-500/20',
+        'Waitlisted': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    };
+
     return (
         <div className="p-4 bg-background/80 border border-border/50 rounded-lg space-y-4">
             <div className="flex justify-between items-start">
@@ -312,10 +355,48 @@ const SavedProgramCard: React.FC<{program: SavedProgram; onDelete: (id: string) 
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
-                <div><h4 className="text-sm font-semibold text-muted-foreground mb-2">Requirements</h4><ul className="text-sm space-y-1 text-muted-foreground"><li><strong>IELTS:</strong> {program.applicationRequirements.ielts}</li><li><strong>TOEFL:</strong> {program.applicationRequirements.toefl}</li><li><strong>GRE/GMAT:</strong> {program.applicationRequirements.greGmat}</li><li><strong>GPA:</strong> {program.applicationRequirements.gpaRequirement}</li></ul></div>
-                <div><h4 className="text-sm font-semibold text-muted-foreground mb-2">Details</h4><ul className="text-sm space-y-1 text-muted-foreground"><li><strong>Fee:</strong> {program.applicationFee}</li><li><strong>Deadlines:</strong>{program.applicationDeadlines?.length > 0 ? (<ul className="list-none list-inside pl-2 pt-1 space-y-1">{program.applicationDeadlines.map((d, i) => (<li key={i}><span className="font-semibold text-foreground">{d.intake}:</span> {d.deadline}</li>))}</ul>) : (<span className="pl-2">Not specified</span>)}</li></ul></div>
+            
+            {/* Application Tracker Section */}
+            <div className="pt-4 border-t border-border">
+                <h4 className="text-md font-semibold text-foreground/90 mb-3">Application Tracker</h4>
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor={`status-${program.id}`} className="block text-sm font-medium text-muted-foreground mb-2">Status</label>
+                            <select
+                                id={`status-${program.id}`}
+                                value={status}
+                                onChange={handleStatusChange}
+                                className={`w-full text-sm rounded-md px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-ring ${statusColors[status]}`}
+                            >
+                                {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                             <label htmlFor={`deadline-${program.id}`} className="block text-sm font-medium text-muted-foreground mb-2">Deadline</label>
+                             <input
+                                 type="date"
+                                 id={`deadline-${program.id}`}
+                                 value={deadline}
+                                 onChange={handleDeadlineChange}
+                                 className="w-full bg-input border border-border rounded-lg shadow-sm px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
+                             />
+                        </div>
+                    </div>
+                    <div>
+                         <Textarea
+                            label="Notes & To-Do"
+                            id={`notes-${program.id}`}
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            onBlur={handleNotesBlur}
+                            placeholder="e.g., Finalize personal statement, ask Prof. X for recommendation..."
+                            rows={3}
+                        />
+                    </div>
+                </div>
             </div>
+
             <div className="flex flex-wrap gap-4 pt-4 border-t border-border">
                 <a href={program.programLink} target="_blank" rel="noopener noreferrer" className="text-sm inline-flex items-center gap-2 text-foreground bg-secondary hover:bg-accent px-3 py-1.5 rounded-md transition">Program Page<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>
                 <a href={program.applicationLink} target="_blank" rel="noopener noreferrer" className="text-sm inline-flex items-center gap-2 text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-md transition glow-on-hover">Application Link<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>
@@ -327,8 +408,9 @@ const SavedProgramCard: React.FC<{program: SavedProgram; onDelete: (id: string) 
 const SavedProgramAccordion: React.FC<{
     universityName: string;
     programs: SavedProgram[];
+    onUpdate: (program: SavedProgram) => void;
     onDelete: (id: string) => void;
-}> = ({ universityName, programs, onDelete }) => {
+}> = ({ universityName, programs, onUpdate, onDelete }) => {
     const [isOpen, setIsOpen] = useState(true);
 
     return (
@@ -345,7 +427,7 @@ const SavedProgramAccordion: React.FC<{
             {isOpen && (
                 <div className="p-4 border-t border-border space-y-4">
                     {programs.map(program => (
-                        <SavedProgramCard key={program.id} program={program} onDelete={onDelete} />
+                        <SavedProgramCard key={program.id} program={program} onUpdate={onUpdate} onDelete={onDelete} />
                     ))}
                 </div>
             )}
@@ -354,7 +436,11 @@ const SavedProgramAccordion: React.FC<{
 };
 
 
-const ProgramsView: React.FC<{savedPrograms: SavedProgram[]; onDelete: (id: string) => void;}> = ({ savedPrograms, onDelete }) => {
+const ProgramsView: React.FC<{
+    savedPrograms: SavedProgram[];
+    onUpdate: (program: SavedProgram) => void;
+    onDelete: (id: string) => void;
+}> = ({ savedPrograms, onUpdate, onDelete }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredAndGroupedPrograms = useMemo(() => {
@@ -394,6 +480,7 @@ const ProgramsView: React.FC<{savedPrograms: SavedProgram[]; onDelete: (id: stri
                                 key={uniName} 
                                 universityName={uniName} 
                                 programs={programs} 
+                                onUpdate={onUpdate}
                                 onDelete={onDelete} 
                             />
                         ))}
@@ -427,6 +514,7 @@ interface SavedTabProps {
   onGenerateSop: (professor: SavedProfessor, papers: string[]) => void;
   analyzingId: string | null;
   savedPrograms: SavedProgram[];
+  onUpdateProgram: (program: SavedProgram) => void;
   onDeleteProgram: (id: string) => void;
 }
 
@@ -461,7 +549,11 @@ export const SavedTab: React.FC<SavedTabProps> = (props) => {
                 />
             )}
             {activeTab === 'programs' && (
-                <ProgramsView savedPrograms={props.savedPrograms} onDelete={props.onDeleteProgram} />
+                <ProgramsView 
+                    savedPrograms={props.savedPrograms} 
+                    onUpdate={props.onUpdateProgram}
+                    onDelete={props.onDeleteProgram} 
+                />
             )}
         </Card>
     );

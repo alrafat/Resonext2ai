@@ -440,6 +440,9 @@ function App() {
             const newSavedProgram: SavedProgram = {
                 id: programId,
                 universityName: universityName,
+                applicationStatus: 'Not Started',
+                deadline: '',
+                notes: '',
                 ...program
             };
             setSavedPrograms(prev => [...prev, newSavedProgram]);
@@ -448,6 +451,10 @@ function App() {
     
     const handleDeleteSavedProgram = (programId: string) => {
         setSavedPrograms(prev => prev.filter(p => p.id !== programId));
+    };
+    
+    const handleUpdateSavedProgram = (updatedProgram: SavedProgram) => {
+        setSavedPrograms(prev => prev.map(p => p.id === updatedProgram.id ? updatedProgram : p));
     };
 
     // --- SOP Generation Flow Handlers ---
@@ -590,31 +597,15 @@ function App() {
                     isProfileComplete={isProfileComplete}
                     savedItemsCount={savedProfessors.length + savedPrograms.length}
                     isLoading={{ 
-                        discover: isDiscoveryLoading || isProgramDiscoveryLoading, 
-                        generate: isSopLoading || isDiscoveryLoading
+                        discover: isDiscoveryLoading || isProgramDiscoveryLoading,
+                        generate: isSopLoading
                     }}
                 />
-                <div className="flex-1 py-6 md:pl-8">
+                <div className="flex-grow md:pl-6">
                     {activeView === 'home' && <Home setActiveView={setActiveView} isProfileComplete={isProfileComplete} />}
-                    
-                    {activeView === 'profile' && activeProfileId && (
-                        <ProfileForm
-                            profiles={profiles}
-                            setProfiles={setProfiles}
-                            activeProfileId={activeProfileId}
-                            setActiveProfileId={setActiveProfileId}
-                            createNewProfile={createNewProfile}
-                        />
-                    )}
-
-                    {activeView === 'discover' && activeProfile && (
-                        <DiscoverView {...discoverViewProps} />
-                    )}
-
-                    {activeView === 'generate' && activeProfileId && (
-                        <GenerateView {...generateViewProps} />
-                    )}
-                    
+                    {activeView === 'profile' && <ProfileForm profiles={profiles} setProfiles={setProfiles} activeProfileId={activeProfileId!} setActiveProfileId={setActiveProfileId} createNewProfile={createNewProfile} />}
+                    {activeView === 'discover' && isProfileComplete && <DiscoverView {...discoverViewProps} />}
+                    {activeView === 'generate' && isProfileComplete && <GenerateView {...generateViewProps} />}
                     {activeView === 'saved' && (
                         <SavedTab
                             savedProfessors={savedProfessors}
@@ -627,39 +618,37 @@ function App() {
                             analyzingId={analyzingSavedProfId}
                             savedPrograms={savedPrograms}
                             onDeleteProgram={handleDeleteSavedProgram}
+                            onUpdateProgram={handleUpdateSavedProgram}
                         />
                     )}
                 </div>
             </main>
-            <BottomNav 
-                activeView={activeView}
-                setActiveView={setActiveView}
-                isProfileComplete={isProfileComplete}
-            />
-            {sopGenerationState.isOpen && (
-                <SopGenerationModal
+            <BottomNav activeView={activeView} setActiveView={setActiveView} isProfileComplete={isProfileComplete} />
+
+            {sopGenerationState.isOpen && sopGenerationState.professor && (
+                <SopGenerationModal 
                     isOpen={sopGenerationState.isOpen}
                     onClose={handleCloseSopModal}
                     onSubmit={handleGenerateSopFromModal}
-                    professorName={sopGenerationState.professor?.name || ''}
+                    professorName={sopGenerationState.professor.name}
                     universityName={sopGenerationState.university}
                 />
             )}
-            {analysisModalState.isOpen && analysisModalState.professor && (
-                <AnalysisResultModal
-                    isOpen={analysisModalState.isOpen}
-                    onClose={() => setAnalysisModalState({ isOpen: false, result: null, professor: null })}
-                    result={analysisModalState.result}
-                    professor={analysisModalState.professor}
-                    isRegenerating={isRegenerating}
-                    onRegenerate={handleRegenerateForModal}
-                    onSaveAnalysis={(result) => {
-                        if (analysisModalState.professor) {
-                            handleSaveAnalysisToProfessor(analysisModalState.professor, result);
-                        }
-                    }}
-                />
-            )}
+            
+            <AnalysisResultModal
+                isOpen={analysisModalState.isOpen}
+                onClose={() => setAnalysisModalState({isOpen: false, result: null, professor: null})}
+                result={analysisModalState.result}
+                professor={analysisModalState.professor}
+                isRegenerating={isRegenerating}
+                onRegenerate={handleRegenerateForModal}
+                onSaveAnalysis={(result) => {
+                    if (analysisModalState.professor) {
+                        handleSaveAnalysisToProfessor(analysisModalState.professor, result)
+                    }
+                }}
+            />
+
         </div>
     );
 }
