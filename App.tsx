@@ -1,12 +1,11 @@
 
-
-
-
 import React, { useState, useMemo, useEffect } from 'react';
-import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserAccount, UserData } from './types';
+import type { Session } from '@supabase/supabase-js';
+import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { generateAnalysisAndEmail, regenerateEmail, generateSop, findProgramsForSpecificUniversity, findProgramsBroadly } from './services/geminiService';
-import { hashPassword, comparePassword } from './utils/auth';
+import { generateAnalysisAndEmail, regenerateEmail, generateSop, findProgramsForSpecificUniversity, findProgramsBroadly, isGeminiConfigured } from './services/geminiService';
+import * as dataService from './services/dataService';
+import { isSupabaseConfigured } from './services/supabaseClient';
 
 // Components
 import { Login } from './components/Login';
@@ -58,9 +57,29 @@ interface AnalysisModalState {
 }
 
 function App() {
+     // --- Critical Configuration Check ---
+    // If Supabase keys are missing, the app cannot function. Display a user-friendly error page.
+    if (!isSupabaseConfigured) {
+        return (
+            <div className="min-h-screen bg-background text-foreground font-sans flex items-center justify-center p-6 text-center">
+                <div className="max-w-lg bg-card border border-destructive/50 p-8 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <h1 className="mt-4 text-2xl font-bold text-destructive">Application Configuration Error</h1>
+                    <p className="mt-4 text-muted-foreground">
+                        This application requires a database connection, but the necessary environment variables (<code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code>) are missing.
+                    </p>
+                    <p className="mt-2 text-muted-foreground">
+                        Please ensure these are correctly configured in your hosting provider's settings and redeploy the application.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+    
     // --- App-level State (Simulated DB and Session) ---
-    const [users, setUsers] = useLocalStorage<Record<string, UserAccount>>('resonext_users_db', {});
-    const [currentUserEmail, setCurrentUserEmail] = useLocalStorage<string | null>('resonext_currentUser', null);
+    const [session, setSession] = useState<Session | null>(null);
     const [authError, setAuthError] = useState<string | null>(null);
 
     // --- User-Specific Data State ---
@@ -100,62 +119,75 @@ function App() {
     const [analysisModalState, setAnalysisModalState] = useState<AnalysisModalState>({ isOpen: false, result: null, professor: null });
     const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-    // --- Data Synchronization ---
-    // Load data from "DB" when user logs in or on first page load
+    // --- Supabase Session Management ---
     useEffect(() => {
-        setIsInitialLoad(true);
-        if (currentUserEmail && users[currentUserEmail]) {
-            const userData = users[currentUserEmail].data;
-            setProfiles(userData.profiles || []);
-            setActiveProfileId(userData.activeProfileId || null);
-            setSavedProfessors(userData.savedProfessors || []);
-            setSavedPrograms(userData.savedPrograms || []);
-            setSops(userData.sops || []);
-        }
-        // Use a timeout to ensure state updates are batched and finished before allowing saving.
-        // This prevents race conditions on login/logout.
-        setTimeout(() => setIsInitialLoad(false), 0);
-    }, [currentUserEmail]); // Note: `users` is removed to prevent re-triggering on every data save
+        dataService.getSession().then(({ data: { session } }) => {
+          setSession(session);
+        });
+    
+        const { data: { subscription } } = dataService.onAuthStateChange((_event, session) => {
+          setSession(session);
+        });
+    
+        return () => subscription.unsubscribe();
+    }, []);
 
-    // Save data back to "DB" whenever it changes for the logged-in user
+    // --- Data Synchronization ---
+    // Load data from the data service when user logs in
     useEffect(() => {
-        // Do not save if we are in the middle of an initial load or if no user is logged in
-        if (isInitialLoad || !currentUserEmail) {
-            return;
-        }
+        let isMounted = true;
+        const loadData = async () => {
+            if (session?.user?.email) {
+                setIsInitialLoad(true);
+                const data = await dataService.getUserData(session.user.email);
+                if (isMounted && data) {
+                    setProfiles(data.profiles || []);
+                    setActiveProfileId(data.activeProfileId || null);
+                    setSavedProfessors(data.savedProfessors || []);
+                    setSavedPrograms(data.savedPrograms || []);
+                    setSops(data.sops || []);
+                }
+                setTimeout(() => { if(isMounted) setIsInitialLoad(false); }, 0);
+            } else {
+                // Clear state on logout
+                setProfiles([]);
+                setActiveProfileId(null);
+                setSavedProfessors([]);
+                setSavedPrograms([]);
+                setSops([]);
+                setIsInitialLoad(false);
+            }
+        };
+        
+        loadData();
+        return () => { isMounted = false; };
+    }, [session]);
+
+    // Save data back to the data service whenever it changes for the logged-in user
+    useEffect(() => {
+        if (isInitialLoad || !session?.user?.email) return;
 
         const currentDataInState: UserData = { profiles, activeProfileId, savedProfessors, savedPrograms, sops };
-        
-        // Only update if there's an actual change to prevent loops
-        setUsers(prevUsers => {
-            const currentDataInDb = prevUsers[currentUserEmail]?.data;
-            if (JSON.stringify(currentDataInDb) !== JSON.stringify(currentDataInState)) {
-                const newUsers = { ...prevUsers };
-                if (newUsers[currentUserEmail]) {
-                    newUsers[currentUserEmail] = {
-                        ...newUsers[currentUserEmail],
-                        data: currentDataInState
-                    };
-                }
-                return newUsers;
-            }
-            return prevUsers; // Return previous state if no change
-        });
-    }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, currentUserEmail, isInitialLoad, setUsers]);
+        dataService.saveUserData(session.user.email, currentDataInState);
+    }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, session, isInitialLoad]);
 
     // Initialize first profile if a new user has none
     useEffect(() => {
-        if (!isInitialLoad && currentUserEmail && profiles.length === 0) {
+        if (!isInitialLoad && session && profiles.length === 0) {
             const firstProfile = createNewProfile('Default Profile');
             setProfiles([firstProfile]);
             setActiveProfileId(firstProfile.id);
-        } else if (!isInitialLoad && currentUserEmail && profiles.length > 0 && !activeProfileId) {
+            // Immediately save this to the backend
+            if (session.user.email) {
+                const initialData: UserData = { profiles: [firstProfile], activeProfileId: firstProfile.id, savedProfessors: [], savedPrograms: [], sops: [] };
+                dataService.saveUserData(session.user.email, initialData);
+            }
+        } else if (!isInitialLoad && session && profiles.length > 0 && !activeProfileId) {
             setActiveProfileId(profiles[0].id);
         }
-    }, [currentUserEmail, profiles, isInitialLoad]);
+    }, [session, profiles, activeProfileId, isInitialLoad]);
 
     // --- Derived State ---
-    const currentUserAccount = useMemo(() => currentUserEmail ? users[currentUserEmail] : null, [currentUserEmail, users]);
     const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId) || null, [profiles, activeProfileId]);
     const isProfileComplete = useMemo(() => !!(activeProfile?.name && activeProfile.academicSummary && activeProfile.researchInterests && activeProfile.bachelor?.major), [activeProfile]);
     const savedProfessorIds = useMemo(() => new Set(savedProfessors.map(p => p.id)), [savedProfessors]);
@@ -169,40 +201,31 @@ function App() {
     }, [theme]);
     
     // --- Handlers ---
-    const handleLogin = (email: string, pass: string) => {
-        const user = users[email];
-        if (!user) {
-            setAuthError("No account found with this email. Please sign up.");
-            return;
-        }
-        if (comparePassword(pass, user.password)) {
-            setCurrentUserEmail(email);
-            setAuthError(null);
-            setActiveView(user.data.profiles.length > 0 ? 'home' : 'profile');
+    const handleLogin = async (email: string, pass: string) => {
+        setAuthError(null);
+        const { error } = await dataService.signIn(email, pass);
+        if (error) {
+            setAuthError(error.message);
         } else {
-            setAuthError("Invalid password.");
+            // Data loading is handled by the session useEffect
+            const userData = await dataService.getUserData(email);
+            setActiveView(userData && userData.profiles.length > 0 ? 'home' : 'profile');
         }
     };
 
-    const handleSignUp = (fullName: string, email: string, pass: string) => {
-        if (users[email]) {
-            setAuthError("An account with this email already exists.");
-            return;
-        }
-        const newUserAccount: UserAccount = {
-            id: email,
-            fullName,
-            password: hashPassword(pass),
-            data: defaultUserData(),
-        };
-        setUsers(prev => ({ ...prev, [email]: newUserAccount }));
-        setCurrentUserEmail(email);
+    const handleSignUp = async (fullName: string, email: string, pass: string) => {
         setAuthError(null);
-        setActiveView('profile');
+        const { error } = await dataService.signUp(email, pass, { fullName });
+        if (error) {
+            setAuthError(error.message);
+        } else {
+            setActiveView('profile');
+        }
     };
     
-    const handleLogout = () => {
-        setCurrentUserEmail(null);
+    const handleLogout = async () => {
+        await dataService.signOut();
+        setActiveView('home');
     };
 
     const handleSaveAnalysisToProfessor = (profToSave: ProfessorProfile | ProfessorRecommendation | SavedProfessor, result: AnalysisResult) => {
@@ -373,7 +396,7 @@ function App() {
         } catch (e: any) { setError(e.message || "Failed to generate SOP."); } finally { setIsSopLoading(false); }
     }
 
-    if (!currentUserEmail) {
+    if (!session) {
         return <Login onLogin={handleLogin} onSignUp={handleSignUp} error={authError} />;
     }
     
@@ -390,8 +413,13 @@ function App() {
 
     return (
         <div className="bg-background text-foreground font-sans min-h-screen">
+            {!isGeminiConfigured && (
+                <div className="bg-amber-500/10 text-amber-600 dark:text-amber-300 text-center p-2 text-sm font-medium sticky top-0 z-50">
+                    <strong>Warning:</strong> The Gemini API key (<code>API_KEY</code>) is not configured. AI-powered features will not be available.
+                </div>
+            )}
             <Header 
-              currentUser={currentUserAccount} 
+              currentUserFullName={session?.user?.user_metadata?.fullName}
               onLogout={handleLogout} 
               setActiveView={setActiveView} 
               theme={theme}

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
-import { Modal } from './ui/Modal'; // A new component for modals
+import { Modal } from './ui/Modal';
+import * as dataService from '../services/dataService';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void;
@@ -33,8 +34,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, error }) => {
   const handleSignUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    if (password.length < 5) {
-        setFormError("Password must be at least 5 characters long.");
+    if (password.length < 6) { // Supabase default minimum
+        setFormError("Password must be at least 6 characters long.");
         return;
     }
     if (password !== confirmPassword) {
@@ -47,9 +48,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, error }) => {
   };
   
   const handleGoogleLogin = () => {
-      // In a real app, this would trigger the Google OAuth flow.
-      // Here, we'll just show an alert to inform the user.
-      alert("Login with Google is for demonstration purposes. A real implementation requires a backend server for security. Please use the email/password sign up.");
+      // NOTE: For this to work, you must enable the Google provider in your
+      // Supabase project's Authentication settings and add the necessary credentials.
+      dataService.signInWithGoogle();
   };
 
   const clearForm = () => {
@@ -105,7 +106,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, error }) => {
                       <h2 className="text-2xl font-bold text-center text-foreground">Create Account</h2>
                       <Input label="Full Name" id="fullName" type="text" name="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jane Doe" required />
                       <Input label="Email Address" id="email-signup" type="email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
-                      <Input label="Password" id="password-signup" type="password" name="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 5 characters" required />
+                      <Input label="Password" id="password-signup" type="password" name="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" required />
                       <Input label="Confirm Password" id="confirm-password" type="password" name="confirmPassword" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" required />
                       {(error || formError) && <p className="text-sm text-destructive text-center">{error || formError}</p>}
                       <Button type="submit" className="w-full" variant="primary" glow>Sign Up</Button>
@@ -119,7 +120,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, error }) => {
 
       <Modal isOpen={isForgotModalOpen} onClose={() => setIsForgotModalOpen(false)} title="Forgot Password">
         <p className="text-sm text-muted-foreground">
-            This is a demonstration application. In a real-world scenario, a password reset link would be sent to your email address.
+            In a real application, this would trigger a password reset flow. For this demo, please create a new account if you've forgotten your password.
         </p>
       </Modal>
     </>

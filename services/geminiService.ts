@@ -1,12 +1,17 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import type { UserProfile, ProfessorProfile, AnalysisResult, TieredUniversities, UniversityRecommendation, ProfessorRecommendation, SavedProfessor, ProgramDiscoveryResult, UniversityWithPrograms } from '../types';
 
-// This check is crucial for helping the user debug their deployment.
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set. Please add it to your environment secrets in Google AI Studio or your hosting provider's settings (e.g., Vercel).");
-}
+// This variable is injected by the Vite build process (see vite.config.ts)
+const apiKey = process.env.API_KEY;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Export a flag to check for the API key without crashing the app.
+export const isGeminiConfigured = !!apiKey;
+
+// Initialize with an empty string if the key is missing. The @google/genai library will
+// throw an error upon the first API call, which can be caught by the UI,
+// rather than crashing the entire application on load.
+const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 const model = 'gemini-2.5-flash'; // Standardize on a reliable and available model
 
 /**
@@ -30,6 +35,7 @@ function parseJsonFromResponse<T>(jsonText: string): T {
 // --- Service Functions - Now Directly Calling the Gemini API ---
 
 export const extractTextFromFile = async (fileContent: string, mimeType: string): Promise<string> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const textPart = { text: "You are a text extraction tool. Your only task is to extract all textual content from the provided document. Output ONLY the raw, unformatted text. Do not add any commentary, greetings, or explanations before or after the extracted text." };
     const filePart = { inlineData: { mimeType, data: fileContent } };
     const response = await ai.models.generateContent({ model, contents: { parts: [textPart, filePart] } });
@@ -37,6 +43,7 @@ export const extractTextFromFile = async (fileContent: string, mimeType: string)
 };
 
 export const extractProfileFromCV = async (cvContent: string, cvMimeType: string): Promise<Partial<UserProfile>> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `From the provided CV, extract the user's professional and academic profile information. Populate all fields of the provided JSON schema. If a specific piece of information isn't found, use an empty string "" or a default empty object for degrees.`;
     const cvPart = { inlineData: { mimeType: cvMimeType, data: cvContent } };
 
@@ -78,6 +85,7 @@ export const extractProfileFromCV = async (cvContent: string, cvMimeType: string
 };
 
 export const generateAnalysisAndEmail = async (userProfile: UserProfile, professorProfile: ProfessorProfile, selectedPapers?: string[]): Promise<AnalysisResult> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `Analyze the alignment between the student's profile and the professor's research. Based on this, generate a concise alignment summary and a personalized, professional outreach email.
 
 Student Profile:
@@ -122,6 +130,7 @@ Task:
 };
 
 export const regenerateEmail = async (userProfile: UserProfile, professorProfile: ProfessorProfile, previousResult: AnalysisResult, prompt: string): Promise<Partial<AnalysisResult>> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const regenerationPrompt = `You are an expert academic editor. A student has an existing draft of an outreach email to a professor. Your task is to revise it based on their specific request.
 
 Original Email Subject: ${previousResult.emailSubject}
@@ -147,6 +156,7 @@ Based *only* on the student's request, revise the subject and body. Output a new
 };
 
 export const generateSop = async (userProfile: UserProfile, university: string, program: string, targetProfessors?: (SavedProfessor | ProfessorProfile | ProfessorRecommendation)[], selectedPapers?: string[]): Promise<string> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const styleGuidance = (userProfile.demoSop || (userProfile.sampleSops && userProfile.sampleSops.length > 0))
     ? `
     WRITING STYLE GUIDANCE:
@@ -199,6 +209,7 @@ Output the SOP content directly.`;
 };
 
 export const regenerateSop = async (userProfile: UserProfile, originalSop: string, prompt: string): Promise<string> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const regenerationPrompt = `You are an expert academic editor. A student has a draft of their Statement of Purpose (SOP). Your task is to revise it based on their specific request, using their profile for context.
 
 Student Profile: ${JSON.stringify(userProfile, null, 2)}
@@ -224,6 +235,7 @@ Based on the student's request, revise the SOP. Ensure the tone remains professi
 };
 
 export const findMatchingUniversities = async (userProfile: UserProfile, country: string, state?: string): Promise<TieredUniversities> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `
         TASK: Use Google Search to find universities matching the student profile for the specified country/state.
         - Categorize universities into three tiers: 'highTier' (ambitious), 'mediumTier' (good match), and 'lowTier' (safer).
@@ -251,6 +263,7 @@ export const findMatchingUniversities = async (userProfile: UserProfile, country
 };
 
 export const findMatchingProfessors = async (userProfile: UserProfile, universityName: string, department?: string, researchInterest?: string, existingProfessors?: ProfessorRecommendation[]): Promise<UniversityRecommendation> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `
         TASK: Use Google Search to find professors at a specific university whose research aligns with the student's profile.
         - For each professor, find their name, designation, department, email, lab website, a concise research summary, and 1-2 recent, relevant papers with titles and public links.
@@ -294,6 +307,7 @@ export const findMatchingProfessors = async (userProfile: UserProfile, universit
 };
 
 export const findProgramsForSpecificUniversity = async (userProfile: UserProfile, universityName: string, keywords?: string): Promise<ProgramDiscoveryResult> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `
         TASK: Use Google Search to find relevant graduate programs (Master's or PhD) at a specific university that match a student's profile.
         - For each program, find its name, degree type, relevance to the student, key application requirements (IELTS, TOEFL, GRE/GMAT, GPA), fee, deadlines, and direct links to program and application pages.
@@ -332,6 +346,7 @@ export const findProgramsForSpecificUniversity = async (userProfile: UserProfile
 };
 
 export const findProgramsBroadly = async (userProfile: UserProfile, country?: string, existingUniversities?: UniversityWithPrograms[], keywords?: string, state?: string): Promise<ProgramDiscoveryResult> => {
+    if (!isGeminiConfigured) throw new Error("Gemini API key not configured.");
     const prompt = `
         TASK: Use Google Search to find universities and relevant graduate programs that match a student's profile, focusing on a specific country or region.
         - Find 3-5 suitable universities.
