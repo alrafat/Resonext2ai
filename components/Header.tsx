@@ -1,9 +1,10 @@
 import React from 'react';
 import type { AppView } from '../types';
+import type { Session } from '@supabase/supabase-js';
 import { Button } from './ui/Button';
 
 interface HeaderProps {
-  currentUserFullName: string | null | undefined;
+  session: Session | null;
   onLogout: () => void;
   setActiveView: (view: AppView) => void;
   theme: 'light' | 'dark';
@@ -31,7 +32,9 @@ const ThemeSwitcher: React.FC<{ theme: 'light' | 'dark'; setTheme: (theme: 'ligh
 };
 
 
-export const Header: React.FC<HeaderProps> = ({ currentUserFullName, onLogout, setActiveView, theme, setTheme }) => {
+export const Header: React.FC<HeaderProps> = ({ session, onLogout, setActiveView, theme, setTheme }) => {
+  const currentUserFullName = session?.user?.user_metadata?.full_name;
+
   return (
     <header className="bg-background/80 backdrop-blur-lg border-b border-border sticky top-0 z-20 transition-colors">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,9 +54,9 @@ export const Header: React.FC<HeaderProps> = ({ currentUserFullName, onLogout, s
             </svg>
             <h1 className="text-2xl font-bold text-foreground/90 group-hover:text-foreground transition-opacity font-serifDisplay tracking-tight">Resonext.ai</h1>
           </button>
-          {currentUserFullName && (
+          {session && (
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <span className="text-sm text-muted-foreground hidden sm:block">{currentUserFullName}</span>
+              {currentUserFullName && <span className="text-sm text-muted-foreground hidden sm:block">{currentUserFullName}</span>}
               <ThemeSwitcher theme={theme} setTheme={setTheme} />
               <Button onClick={onLogout} variant="secondary" className="px-4 py-2 text-sm">
                 Logout

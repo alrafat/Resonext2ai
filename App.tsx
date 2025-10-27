@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -419,7 +420,7 @@ function App() {
                 </div>
             )}
             <Header 
-              currentUserFullName={session?.user?.user_metadata?.full_name}
+              session={session}
               onLogout={handleLogout} 
               setActiveView={setActiveView} 
               theme={theme}
