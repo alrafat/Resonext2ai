@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -52,9 +53,10 @@ interface AnalysisModalState {
 }
 
 function App() {
+    const [isConfigured, setIsConfigured] = useState(isSupabaseConfigured());
      // --- Critical Configuration Check ---
-    if (!isSupabaseConfigured()) {
-        return <ConfigurationSetup />;
+    if (!isConfigured) {
+        return <ConfigurationSetup onConfigured={() => setIsConfigured(true)} />;
     }
     
     // --- App-level State ---

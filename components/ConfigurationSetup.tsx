@@ -4,7 +4,11 @@ import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { setupSupabase } from '../services/supabaseClient';
 
-export const ConfigurationSetup: React.FC = () => {
+interface ConfigurationSetupProps {
+  onConfigured: () => void;
+}
+
+export const ConfigurationSetup: React.FC<ConfigurationSetupProps> = ({ onConfigured }) => {
     const [supabaseUrl, setSupabaseUrl] = useState('');
     const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
     const [error, setError] = useState('');
@@ -20,14 +24,14 @@ export const ConfigurationSetup: React.FC = () => {
             // Test the credentials by trying to create a client
             const client = setupSupabase(supabaseUrl, supabaseAnonKey);
             if (client) {
-                // Reload the application to re-initialize all services with the new config
-                window.location.reload();
+                // Instead of reloading, call the callback to update the parent state
+                onConfigured();
             } else {
-                throw new Error("Client creation failed");
+                setError('Could not connect to Supabase with the provided credentials. Please double-check them.');
             }
         } catch (err) {
             console.error(err);
-            setError('Could not connect to Supabase with the provided credentials. Please double-check them.');
+            setError('An error occurred while setting up Supabase. Please check the console.');
             // Clear local storage if setup fails
             localStorage.removeItem('SUPABASE_URL');
             localStorage.removeItem('SUPABASE_ANON_KEY');
