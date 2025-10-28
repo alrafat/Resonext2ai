@@ -82,18 +82,18 @@ export function onAuthStateChange(callback: (event: string, session: import('@su
 
 /**
  * Fetches the data payload for a specific user from the 'user_data' table.
- * @param email The user's email.
+ * @param userId The user's unique ID from Supabase auth.
  * @returns A promise that resolves to the UserData or null if not found.
  * @throws {AuthError} If a database or network error occurs.
  */
-export async function getUserData(email: string): Promise<UserData | null> {
+export async function getUserData(userId: string): Promise<UserData | null> {
     const supabase = getSupabase();
     if (!supabase) return null;
 
     const { data, error } = await supabase
         .from('user_data')
         .select('data')
-        .eq('user_email', email)
+        .eq('id', userId)
         .single();
 
     if (error) {
@@ -113,10 +113,10 @@ export async function getUserData(email: string): Promise<UserData | null> {
 
 /**
  * Saves or updates the data payload for a specific user in the 'user_data' table.
- * @param email The user's email.
+ * @param userId The user's unique ID from Supabase auth.
  * @param data The UserData object to save.
  */
-export async function saveUserData(email: string, data: UserData): Promise<void> {
+export async function saveUserData(userId: string, data: UserData): Promise<void> {
     const supabase = getSupabase();
     if (!supabase) {
         console.error("Supabase not configured, cannot save user data.");
@@ -125,7 +125,7 @@ export async function saveUserData(email: string, data: UserData): Promise<void>
     
     const { error } = await supabase
         .from('user_data')
-        .upsert({ user_email: email, data: data }, { onConflict: 'user_email' });
+        .upsert({ id: userId, data: data }, { onConflict: 'id' });
 
     if (error) {
         console.error("Error saving user data:", error);

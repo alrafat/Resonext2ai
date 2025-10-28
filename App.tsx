@@ -100,14 +100,14 @@ function App() {
 
      // This function is now responsible for the entire data loading process and can be called to retry.
     const loadAndInitializeUserData = async () => {
-        if (!session?.user?.email) return;
+        if (!session?.user?.id) return;
 
         setDataLoadingStatus('loading');
         setError(null);
 
         try {
-            const email = session.user.email;
-            const existingData = await dataService.getUserData(email);
+            const userId = session.user.id;
+            const existingData = await dataService.getUserData(userId);
 
             if (existingData) {
                 const userProfiles = existingData.profiles || [];
@@ -152,7 +152,7 @@ function App() {
 
     // --- Data Synchronization ---
     useEffect(() => {
-        if (session?.user?.email) {
+        if (session?.user?.id) {
             loadAndInitializeUserData();
         } else {
             // User is logged out or session is null. Clear all data from state.
@@ -170,7 +170,7 @@ function App() {
     useEffect(() => {
         // CRITICAL: Only save data if loading was successful and the user is logged in.
         // This prevents overwriting data during login or after a loading error.
-        if (dataLoadingStatus !== 'success' || !session?.user?.email) {
+        if (dataLoadingStatus !== 'success' || !session?.user?.id) {
             return;
         }
 
@@ -181,7 +181,7 @@ function App() {
         }
 
         const currentDataInState: UserData = { profiles, activeProfileId, savedProfessors, savedPrograms, sops };
-        dataService.saveUserData(session.user.email, currentDataInState);
+        dataService.saveUserData(session.user.id, currentDataInState);
     }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, session, dataLoadingStatus]);
 
     // --- Derived State ---
