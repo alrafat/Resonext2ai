@@ -1,4 +1,5 @@
 
+
 import { getSupabase } from './supabaseClient';
 import type { UserData } from '../types';
 import type { AuthTokenResponse, SignUpWithPasswordCredentials, Session, AuthError } from '@supabase/supabase-js';
@@ -27,23 +28,8 @@ export async function signUp(email: string, password: string, options: { fullNam
             }
         }
     };
-    const { data, error } = await supabase.auth.signUp(credentials);
-
-    // If signup is successful, create an initial entry in the user_data table
-    if (!error && data.user) {
-        const initialUserData: UserData = {
-            profiles: [],
-            activeProfileId: null,
-            savedProfessors: [],
-            savedPrograms: [],
-            sops: [],
-        };
-        await supabase
-            .from('user_data')
-            .insert({ user_email: data.user.email, data: initialUserData });
-    }
-
-    return { data, error };
+    // Let the main app component handle data creation on first login
+    return supabase.auth.signUp(credentials);
 }
 
 export async function signIn(email: string, password: string): Promise<AuthTokenResponse> {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -99,6 +100,8 @@ function App() {
     useEffect(() => {
         dataService.getSession().then(({ data: { session } }) => {
           setSession(session);
+          // Set initial load to false after first session check to prevent saving default data
+          setIsInitialLoad(false); 
         });
     
         const { data: { subscription } } = dataService.onAuthStateChange((_event, session) => {
@@ -118,23 +121,20 @@ function App() {
             setSavedProfessors([]);
             setSavedPrograms([]);
             setSops([]);
-            setIsInitialLoad(false); // We are "loaded" into a logged-out state.
             return;
         }
 
-        const email = session.user.email;
         let isMounted = true;
-
+        
         const loadAndInitializeUserData = async () => {
-            setIsInitialLoad(true);
+            const email = session.user!.email!;
             const existingData = await dataService.getUserData(email);
 
             if (!isMounted) return;
 
-            if (existingData && existingData.profiles) {
-                // Existing user, load their data.
+            if (existingData) {
+                // User has a data row, load their data as-is.
                 const userProfiles = existingData.profiles || [];
-                // If activeProfileId is invalid or missing, default to the first profile.
                 const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
                     ? existingData.activeProfileId
                     : (userProfiles.length > 0 ? userProfiles[0].id : null);
@@ -145,7 +145,8 @@ function App() {
                 setSavedPrograms(existingData.savedPrograms || []);
                 setSops(existingData.sops || []);
             } else {
-                // This is a brand new user or a user with no data row.
+                // This is a brand new user (no data row found). Create and save their initial profile.
+                // This is the ONLY place this should happen to prevent data overwrites.
                 const firstProfile = createNewProfile('Default Profile');
                 const initialUserData: UserData = {
                     profiles: [firstProfile],
@@ -164,7 +165,6 @@ function App() {
                 // Save the initial structure to the database.
                 await dataService.saveUserData(email, initialUserData);
             }
-            setIsInitialLoad(false);
         };
 
         loadAndInitializeUserData();
@@ -175,7 +175,14 @@ function App() {
 
     // Save data back to the data service whenever it changes for the logged-in user
     useEffect(() => {
+        // Prevent saving during initial auth check or if user is logged out.
         if (isInitialLoad || !session?.user?.email) return;
+
+        // Prevent saving an empty/default state right after login before real data is loaded.
+        // This is a safeguard; the main data-loading useEffect should handle this, but this adds robustness.
+        if (profiles.length === 0 && savedProfessors.length === 0 && savedPrograms.length === 0) {
+            return;
+        }
 
         const currentDataInState: UserData = { profiles, activeProfileId, savedProfessors, savedPrograms, sops };
         dataService.saveUserData(session.user.email, currentDataInState);
@@ -224,17 +231,16 @@ function App() {
         const { error } = await dataService.signOut();
         if (error) {
             console.error('Error logging out:', error.message);
-        } else {
-            // Explicitly clear state for a faster, more reliable UI update on logout.
-            // The onAuthStateChange listener will also fire, but this guarantees responsiveness.
-            setSession(null); 
-            setProfiles([]);
-            setActiveProfileId(null);
-            setSavedProfessors([]);
-            setSavedPrograms([]);
-            setSops([]);
-            setActiveView('home');
         }
+        // Explicitly clear state for a faster, more reliable UI update on logout.
+        // The onAuthStateChange listener will also fire, but this guarantees responsiveness.
+        setSession(null); 
+        setProfiles([]);
+        setActiveProfileId(null);
+        setSavedProfessors([]);
+        setSavedPrograms([]);
+        setSops([]);
+        setActiveView('home');
     };
 
     const handleSaveAnalysisToProfessor = (profToSave: ProfessorProfile | ProfessorRecommendation | SavedProfessor, result: AnalysisResult) => {
@@ -405,6 +411,15 @@ function App() {
         } catch (e: any) { setError(e.message || "Failed to generate SOP."); } finally { setIsSopLoading(false); }
     }
 
+    if (isInitialLoad) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                {/* You can add a more sophisticated loading spinner here */}
+                <p>Loading...</p>
+            </div>
+        );
+    }
+    
     if (!session) {
         return <Login onLogin={handleLogin} onSignUp={handleSignUp} error={authError} />;
     }
