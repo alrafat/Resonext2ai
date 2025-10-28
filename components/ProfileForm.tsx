@@ -11,7 +11,7 @@ import { extractProfileFromCV, extractTextFromFile } from '../services/geminiSer
 interface ProfileFormProps {
   profiles: UserProfile[];
   setProfiles: React.Dispatch<React.SetStateAction<UserProfile[]>>;
-  activeProfileId: string;
+  activeProfileId: string | null;
   setActiveProfileId: (id: string) => void;
   createNewProfile: (name: string) => UserProfile;
 }
@@ -81,6 +81,12 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
       // When the active profile changes from props, update the local editing state
       setEditedProfile(profiles.find(p => p.id === activeProfileId));
   }, [activeProfileId, profiles]);
+
+  const handleCreateFirstProfile = () => {
+    const firstProfile = createNewProfile('Default Profile');
+    setProfiles([firstProfile]);
+    setActiveProfileId(firstProfile.id);
+  };
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -189,17 +195,14 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
     try {
         const base64String = await fileToBase64(file);
         
-        // Update local state with file info first
         let updatedSops = (editedProfile.sampleSops || []).map(sop => 
             sop.id === sopId ? { ...sop, fileName: file.name, fileContent: base64String, fileMimeType: file.type, content: '' } : sop
         );
         setEditedProfile({ ...editedProfile, sampleSops: updatedSops });
         
-        // Start extraction
         setIsExtractingSop(prev => ({ ...prev, [sopId]: true }));
         const extractedText = await extractTextFromFile(base64String, file.type);
 
-        // Update with extracted text, making sure to get the latest version of the sops array
         setEditedProfile(currentProfile => {
             if (!currentProfile) return currentProfile;
             const finalSops = (currentProfile.sampleSops || []).map(s =>
@@ -234,7 +237,21 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
 
 
   if (!editedProfile) {
-      return <Card><p>No active profile selected. Please select or create a profile.</p></Card>
+    // If no profiles exist at all, show the dedicated "Create First Profile" view.
+    if (profiles.length === 0) {
+      return (
+        <Card className="text-center py-10">
+          <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+          <h2 className="mt-4 text-2xl font-bold text-foreground">Create Your Profile</h2>
+          <p className="mt-2 text-muted-foreground mb-8">Your profile is the key to unlocking Resonext's AI features. Let's set it up.</p>
+          <Button onClick={handleCreateFirstProfile} variant="primary" glow>
+            Create First Profile
+          </Button>
+        </Card>
+      );
+    }
+    // This is an edge case: profiles exist, but none is active. Prompt user to select one.
+    return <Card><p>No active profile selected. Please select one from the dropdown above.</p></Card>
   }
 
   return (
@@ -243,7 +260,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profiles, setProfiles,
           <h2 className="text-2xl font-bold text-foreground mb-2 sm:mb-0">My Profiles</h2>
           <div className="flex items-center gap-2">
             <select
-                value={activeProfileId}
+                value={activeProfileId || ''}
                 onChange={e => setActiveProfileId(e.target.value)}
                 className="w-full sm:w-auto bg-input border border-border rounded-md shadow-sm px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition"
             >

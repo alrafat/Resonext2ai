@@ -23,7 +23,6 @@ import { DiscoverView } from './components/DiscoverView';
 import { GenerateView } from './components/GenerateView';
 import { DiscoveryStage } from './components/DiscoveryTab';
 import { ConfigurationSetup } from './components/ConfigurationSetup';
-// FIX: Add missing import for Card component
 import { Card } from './components/ui/Card';
 
 
@@ -145,21 +144,16 @@ function App() {
                     setSavedPrograms(existingData.savedPrograms || []);
                     setSops(existingData.sops || []);
                 } else {
-                    const firstProfile = createNewProfile('Default Profile');
-                    const initialUserData: UserData = {
-                        profiles: [firstProfile],
-                        activeProfileId: firstProfile.id,
-                        savedProfessors: [],
-                        savedPrograms: [],
-                        sops: [],
-                    };
-                    
-                    setProfiles(initialUserData.profiles);
-                    setActiveProfileId(initialUserData.activeProfileId);
-                    setSavedProfessors(initialUserData.savedProfessors);
-                    setSavedPrograms(initialUserData.savedPrograms);
-                    setSops(initialUserData.sops);
-                    await dataService.saveUserData(email, initialUserData);
+                    // **THE FIX**: This is the new, safe logic.
+                    // If no data is found, do NOT create a default profile automatically.
+                    // Instead, set an empty state. The UI (`ProfileForm`) will now
+                    // prompt the user to create their first profile, making the
+                    // action explicit and preventing accidental data overwrites.
+                    setProfiles([]);
+                    setActiveProfileId(null);
+                    setSavedProfessors([]);
+                    setSavedPrograms([]);
+                    setSops([]);
                 }
             } catch (e: any) {
                 console.error("Fatal error: Could not load user data.", e);
@@ -177,11 +171,13 @@ function App() {
     useEffect(() => {
         if (isInitialLoad || !session?.user?.email) return;
         
-        // This is a critical safeguard. We should only save if we know for a fact
-        // that data has been loaded. A simple way is to check if profiles exist.
-        // A user can have 0 professors/programs, but must have at least one profile.
-        // The data-loading useEffect ensures this.
-        if (profiles.length === 0) {
+        // This safeguard prevents saving an empty state during the initial login/load flicker,
+        // but the main data loss prevention is now in the data loading useEffect.
+        // We only save if there is at least one profile, which is now only created via user action.
+        if (profiles.length === 0 && activeProfileId === null) {
+            // This is a valid state for a new user, but we don't want to save "nothing"
+            // over potentially existing data if there was a load flicker.
+            // The first save will happen when the first profile is created.
             return;
         }
 
@@ -210,8 +206,7 @@ function App() {
         if (error) {
             setAuthError(error.message);
         } else {
-            const userData = await dataService.getUserData(email);
-            setActiveView(userData && userData.profiles.length > 0 ? 'home' : 'profile');
+            // Let the data sync useEffect handle setting the correct view
         }
     };
 
@@ -222,7 +217,7 @@ function App() {
         if (error) {
             setAuthError(error.message);
         } else {
-            setActiveView('profile');
+            setActiveView('profile'); // New user should be directed to profile creation
         }
     };
     
@@ -469,7 +464,7 @@ function App() {
                 />
                 <div className="flex-grow md:pl-6">
                     {activeView === 'home' && <Home setActiveView={setActiveView} isProfileComplete={isProfileComplete} />}
-                    {activeView === 'profile' && activeProfileId && <ProfileForm profiles={profiles} setProfiles={setProfiles} activeProfileId={activeProfileId} setActiveProfileId={setActiveProfileId} createNewProfile={createNewProfile} />}
+                    {activeView === 'profile' && <ProfileForm profiles={profiles} setProfiles={setProfiles} activeProfileId={activeProfileId} setActiveProfileId={setActiveProfileId} createNewProfile={createNewProfile} />}
                     {activeView === 'discover' && isProfileComplete && <DiscoverView {...discoverViewProps} />}
                     {activeView === 'generate' && isProfileComplete && <GenerateView {...generateViewProps} />}
                     {activeView === 'saved' && (
@@ -487,6 +482,9 @@ function App() {
                             onUpdateProgram={handleUpdateSavedProgram}
                         />
                     )}
+                    {/* Fallback for users who need to complete their profile */}
+                    {(activeView === 'discover' || activeView === 'generate') && !isProfileComplete && <Home setActiveView={setActiveView} isProfileComplete={isProfileComplete} />}
+
                 </div>
             </main>
             <BottomNav activeView={activeView} setActiveView={setActiveView} isProfileComplete={isProfileComplete} />
