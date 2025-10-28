@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -23,15 +22,6 @@ import { GenerateView } from './components/GenerateView';
 import { DiscoveryStage } from './components/DiscoveryTab';
 import { ConfigurationSetup } from './components/ConfigurationSetup';
 
-
-// --- MOCK USER DATABASE ---
-const defaultUserData = (): UserData => ({
-    profiles: [],
-    activeProfileId: null,
-    savedProfessors: [],
-    savedPrograms: [],
-    sops: [],
-});
 
 const createNewProfile = (name: string): UserProfile => ({
     id: crypto.randomUUID(),
@@ -60,14 +50,14 @@ interface AnalysisModalState {
 
 function App() {
      // --- Critical Configuration Check ---
-    // If Supabase keys are missing, the app cannot function. Display an interactive setup screen.
     if (!isSupabaseConfigured()) {
         return <ConfigurationSetup />;
     }
     
-    // --- App-level State (Simulated DB and Session) ---
+    // --- App-level State ---
     const [session, setSession] = useState<Session | null>(null);
     const [authError, setAuthError] = useState<string | null>(null);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     // --- User-Specific Data State ---
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -104,7 +94,6 @@ function App() {
     const [sopGenerationState, setSopGenerationState] = useState<SopGenerationState>({ isOpen: false, professor: null, university: '', papers: []});
     const [newlyCreatedSopId, setNewlyCreatedSopId] = useState<string | null>(null);
     const [analysisModalState, setAnalysisModalState] = useState<AnalysisModalState>({ isOpen: false, result: null, professor: null });
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     // --- Supabase Session Management ---
     useEffect(() => {
@@ -120,38 +109,69 @@ function App() {
     }, []);
 
     // --- Data Synchronization ---
-    // Load data from the data service when user logs in
+    // This is the single source of truth for loading, initializing, and clearing data based on session state.
     useEffect(() => {
+        if (!session?.user?.email) {
+            // User is logged out, clear all user-specific state.
+            setProfiles([]);
+            setActiveProfileId(null);
+            setSavedProfessors([]);
+            setSavedPrograms([]);
+            setSops([]);
+            setIsInitialLoad(false); // We are "loaded" into a logged-out state.
+            return;
+        }
+
+        const email = session.user.email;
         let isMounted = true;
-        const loadData = async () => {
-            if (session?.user?.email) {
-                setIsInitialLoad(true);
-                const data = await dataService.getUserData(session.user.email);
-                if (isMounted) {
-                    if (data) {
-                        setProfiles(data.profiles || []);
-                        setActiveProfileId(data.activeProfileId || null);
-                        setSavedProfessors(data.savedProfessors || []);
-                        setSavedPrograms(data.savedPrograms || []);
-                        setSops(data.sops || []);
-                    }
-                    // This now correctly runs after state has been updated from the DB.
-                    setIsInitialLoad(false);
-                }
+
+        const loadAndInitializeUserData = async () => {
+            setIsInitialLoad(true);
+            const existingData = await dataService.getUserData(email);
+
+            if (!isMounted) return;
+
+            if (existingData && existingData.profiles) {
+                // Existing user, load their data.
+                const userProfiles = existingData.profiles || [];
+                // If activeProfileId is invalid or missing, default to the first profile.
+                const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
+                    ? existingData.activeProfileId
+                    : (userProfiles.length > 0 ? userProfiles[0].id : null);
+                
+                setProfiles(userProfiles);
+                setActiveProfileId(userActiveProfileId);
+                setSavedProfessors(existingData.savedProfessors || []);
+                setSavedPrograms(existingData.savedPrograms || []);
+                setSops(existingData.sops || []);
             } else {
-                // Clear state on logout
-                setProfiles([]);
-                setActiveProfileId(null);
-                setSavedProfessors([]);
-                setSavedPrograms([]);
-                setSops([]);
-                setIsInitialLoad(false);
+                // This is a brand new user or a user with no data row.
+                const firstProfile = createNewProfile('Default Profile');
+                const initialUserData: UserData = {
+                    profiles: [firstProfile],
+                    activeProfileId: firstProfile.id,
+                    savedProfessors: [],
+                    savedPrograms: [],
+                    sops: [],
+                };
+                
+                setProfiles(initialUserData.profiles);
+                setActiveProfileId(initialUserData.activeProfileId);
+                setSavedProfessors(initialUserData.savedProfessors);
+                setSavedPrograms(initialUserData.savedPrograms);
+                setSops(initialUserData.sops);
+
+                // Save the initial structure to the database.
+                await dataService.saveUserData(email, initialUserData);
             }
+            setIsInitialLoad(false);
         };
-        
-        loadData();
+
+        loadAndInitializeUserData();
+
         return () => { isMounted = false; };
     }, [session]);
+
 
     // Save data back to the data service whenever it changes for the logged-in user
     useEffect(() => {
@@ -160,22 +180,6 @@ function App() {
         const currentDataInState: UserData = { profiles, activeProfileId, savedProfessors, savedPrograms, sops };
         dataService.saveUserData(session.user.email, currentDataInState);
     }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, session, isInitialLoad]);
-
-    // Initialize first profile if a new user has none
-    useEffect(() => {
-        if (!isInitialLoad && session && profiles.length === 0) {
-            const firstProfile = createNewProfile('Default Profile');
-            setProfiles([firstProfile]);
-            setActiveProfileId(firstProfile.id);
-            // Immediately save this to the backend
-            if (session.user.email) {
-                const initialData: UserData = { profiles: [firstProfile], activeProfileId: firstProfile.id, savedProfessors: [], savedPrograms: [], sops: [] };
-                dataService.saveUserData(session.user.email, initialData);
-            }
-        } else if (!isInitialLoad && session && profiles.length > 0 && !activeProfileId) {
-            setActiveProfileId(profiles[0].id);
-        }
-    }, [session, profiles, activeProfileId, isInitialLoad]);
 
     // --- Derived State ---
     const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId) || null, [profiles, activeProfileId]);
@@ -197,8 +201,9 @@ function App() {
         if (error) {
             setAuthError(error.message);
         } else {
-            // Data loading is handled by the session useEffect
+            // Data loading is now handled entirely by the session useEffect
             const userData = await dataService.getUserData(email);
+            // On successful login, check if a profile exists to direct the user.
             setActiveView(userData && userData.profiles.length > 0 ? 'home' : 'profile');
         }
     };
@@ -209,13 +214,27 @@ function App() {
         if (error) {
             setAuthError(error.message);
         } else {
+            // After sign up, the session will change, and the useEffect will create the initial profile.
+            // Direct the new user to the profile page to start filling it out.
             setActiveView('profile');
         }
     };
     
     const handleLogout = async () => {
-        await dataService.signOut();
-        setActiveView('home');
+        const { error } = await dataService.signOut();
+        if (error) {
+            console.error('Error logging out:', error.message);
+        } else {
+            // Explicitly clear state for a faster, more reliable UI update on logout.
+            // The onAuthStateChange listener will also fire, but this guarantees responsiveness.
+            setSession(null); 
+            setProfiles([]);
+            setActiveProfileId(null);
+            setSavedProfessors([]);
+            setSavedPrograms([]);
+            setSops([]);
+            setActiveView('home');
+        }
     };
 
     const handleSaveAnalysisToProfessor = (profToSave: ProfessorProfile | ProfessorRecommendation | SavedProfessor, result: AnalysisResult) => {

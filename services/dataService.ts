@@ -1,5 +1,4 @@
 
-
 import { getSupabase } from './supabaseClient';
 import type { UserData } from '../types';
 import type { AuthTokenResponse, SignUpWithPasswordCredentials, Session, AuthError } from '@supabase/supabase-js';
@@ -53,13 +52,16 @@ export async function signIn(email: string, password: string): Promise<AuthToken
     return supabase.auth.signInWithPassword({ email, password });
 }
 
-export async function signOut(): Promise<{ error: null }> {
+export async function signOut(): Promise<{ error: AuthError | null }> {
     const supabase = getSupabase();
-    if (supabase) {
-      await supabase.auth.signOut();
+    if (!supabase) {
+        return { error: null };
     }
-    return { error: null }; // signOut doesn't return an error in the same way, so we normalize the response
+    // Using { scope: 'global' } can help ensure all sessions are terminated.
+    const { error } = await supabase.auth.signOut({ scope: 'global' });
+    return { error };
 }
+
 
 export async function signInWithGoogle() {
     const supabase = getSupabase();
