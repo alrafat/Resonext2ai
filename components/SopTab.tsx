@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Sop, UserProfile, SavedProfessor, SavedProgram } from '../types';
 import { generateSop, regenerateSop } from '../services/geminiService';

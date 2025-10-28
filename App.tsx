@@ -152,9 +152,9 @@ function App() {
 
     // --- Data Synchronization ---
     useEffect(() => {
-        if (session?.user?.id) {
+        if (session?.user?.id && dataLoadingStatus === 'idle') {
             loadAndInitializeUserData();
-        } else {
+        } else if (!session?.user?.id) {
             // User is logged out or session is null. Clear all data from state.
             setProfiles([]);
             setActiveProfileId(null);
@@ -163,7 +163,7 @@ function App() {
             setSops([]);
             setDataLoadingStatus('idle');
         }
-    }, [session]);
+    }, [session, dataLoadingStatus]);
 
 
     // Save data back to the data service whenever it changes for the logged-in user
