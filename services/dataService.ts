@@ -1,10 +1,24 @@
-import { supabase } from './supabaseClient';
+
+
+import { getSupabase } from './supabaseClient';
 import type { UserData } from '../types';
-import type { AuthTokenResponse, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
+import type { AuthTokenResponse, SignUpWithPasswordCredentials, Session, AuthError } from '@supabase/supabase-js';
+
+const createConfigError = (): AuthTokenResponse => ({
+    data: { user: null, session: null },
+    error: {
+        message: 'Supabase client is not configured. Please check your environment variables.',
+        name: 'ConfigurationError',
+        status: 500,
+    } as AuthError,
+});
 
 // --- Auth ---
 
 export async function signUp(email: string, password: string, options: { fullName: string }): Promise<AuthTokenResponse> {
+    const supabase = getSupabase();
+    if (!supabase) return createConfigError();
+    
     const credentials: SignUpWithPasswordCredentials = {
         email,
         password,
@@ -34,15 +48,25 @@ export async function signUp(email: string, password: string, options: { fullNam
 }
 
 export async function signIn(email: string, password: string): Promise<AuthTokenResponse> {
+    const supabase = getSupabase();
+    if (!supabase) return createConfigError();
     return supabase.auth.signInWithPassword({ email, password });
 }
 
 export async function signOut(): Promise<{ error: null }> {
-    await supabase.auth.signOut();
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     return { error: null }; // signOut doesn't return an error in the same way, so we normalize the response
 }
 
 export async function signInWithGoogle() {
+    const supabase = getSupabase();
+    if (!supabase) {
+        console.error("Supabase not configured, cannot sign in with Google.");
+        return;
+    }
     // Before calling this, ensure you have enabled the Google provider in your Supabase project's Authentication settings.
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -51,11 +75,18 @@ export async function signInWithGoogle() {
 
 // --- Session Management ---
 
-export function getSession() {
+export function getSession(): Promise<{ data: { session: Session | null }, error: AuthError | null }> {
+    const supabase = getSupabase();
+    if (!supabase) return Promise.resolve({ data: { session: null }, error: null });
     return supabase.auth.getSession();
 }
 
 export function onAuthStateChange(callback: (event: string, session: import('@supabase/supabase-js').Session | null) => void) {
+    const supabase = getSupabase();
+    if (!supabase) {
+        // Return a dummy subscription object that does nothing, preventing a crash.
+        return { data: { subscription: { unsubscribe: () => {} } } };
+    }
     return supabase.auth.onAuthStateChange(callback);
 }
 
@@ -67,6 +98,9 @@ export function onAuthStateChange(callback: (event: string, session: import('@su
  * @returns A promise that resolves to the UserData or null if not found.
  */
 export async function getUserData(email: string): Promise<UserData | null> {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
     const { data, error } = await supabase
         .from('user_data')
         .select('data')
@@ -87,6 +121,12 @@ export async function getUserData(email: string): Promise<UserData | null> {
  * @param data The UserData object to save.
  */
 export async function saveUserData(email: string, data: UserData): Promise<void> {
+    const supabase = getSupabase();
+    if (!supabase) {
+        console.error("Supabase not configured, cannot save user data.");
+        return;
+    }
+    
     const { error } = await supabase
         .from('user_data')
         .upsert({ user_email: email, data: data }, { onConflict: 'user_email' });

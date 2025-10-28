@@ -6,7 +6,10 @@ import type { UserProfile, ProfessorProfile, AnalysisResult, TieredUniversities,
 const apiKey = process.env.API_KEY;
 
 // Export a flag to check for the API key without crashing the app.
-export const isGeminiConfigured = !!apiKey;
+// FIX: This check now correctly handles cases where Vite replaces an undefined environment
+// variable with the literal string "undefined", ensuring the warning banner appears correctly.
+export const isGeminiConfigured = !!apiKey && apiKey !== 'undefined';
+
 
 // Initialize with an empty string if the key is missing. The @google/genai library will
 // throw an error upon the first API call, which can be caught by the UI,

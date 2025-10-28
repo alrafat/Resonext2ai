@@ -21,6 +21,7 @@ import { AnalysisResultModal } from './components/AnalysisResultModal';
 import { DiscoverView } from './components/DiscoverView';
 import { GenerateView } from './components/GenerateView';
 import { DiscoveryStage } from './components/DiscoveryTab';
+import { ConfigurationSetup } from './components/ConfigurationSetup';
 
 
 // --- MOCK USER DATABASE ---
@@ -59,24 +60,9 @@ interface AnalysisModalState {
 
 function App() {
      // --- Critical Configuration Check ---
-    // If Supabase keys are missing, the app cannot function. Display a user-friendly error page.
-    if (!isSupabaseConfigured) {
-        return (
-            <div className="min-h-screen bg-background text-foreground font-sans flex items-center justify-center p-6 text-center">
-                <div className="max-w-lg bg-card border border-destructive/50 p-8 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <h1 className="mt-4 text-2xl font-bold text-destructive">Application Configuration Error</h1>
-                    <p className="mt-4 text-muted-foreground">
-                        This application requires a database connection, but the necessary environment variables (<code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code>) are missing.
-                    </p>
-                    <p className="mt-2 text-muted-foreground">
-                        Please ensure these are correctly configured in your hosting provider's settings and redeploy the application.
-                    </p>
-                </div>
-            </div>
-        );
+    // If Supabase keys are missing, the app cannot function. Display an interactive setup screen.
+    if (!isSupabaseConfigured()) {
+        return <ConfigurationSetup />;
     }
     
     // --- App-level State (Simulated DB and Session) ---
@@ -130,7 +116,7 @@ function App() {
           setSession(session);
         });
     
-        return () => subscription.unsubscribe();
+        return () => subscription?.unsubscribe();
     }, []);
 
     // --- Data Synchronization ---
@@ -141,14 +127,17 @@ function App() {
             if (session?.user?.email) {
                 setIsInitialLoad(true);
                 const data = await dataService.getUserData(session.user.email);
-                if (isMounted && data) {
-                    setProfiles(data.profiles || []);
-                    setActiveProfileId(data.activeProfileId || null);
-                    setSavedProfessors(data.savedProfessors || []);
-                    setSavedPrograms(data.savedPrograms || []);
-                    setSops(data.sops || []);
+                if (isMounted) {
+                    if (data) {
+                        setProfiles(data.profiles || []);
+                        setActiveProfileId(data.activeProfileId || null);
+                        setSavedProfessors(data.savedProfessors || []);
+                        setSavedPrograms(data.savedPrograms || []);
+                        setSops(data.sops || []);
+                    }
+                    // This now correctly runs after state has been updated from the DB.
+                    setIsInitialLoad(false);
                 }
-                setTimeout(() => { if(isMounted) setIsInitialLoad(false); }, 0);
             } else {
                 // Clear state on logout
                 setProfiles([]);
