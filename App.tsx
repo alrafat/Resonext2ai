@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -25,6 +21,8 @@ import { GenerateView } from './components/GenerateView';
 import { DiscoveryStage } from './components/DiscoveryTab';
 import { ConfigurationSetup } from './components/ConfigurationSetup';
 import { Card } from './components/ui/Card';
+import { Spinner } from './components/ui/Spinner';
+import { Button } from './components/ui/Button';
 
 
 const createNewProfile = (name: string): UserProfile => ({
@@ -62,7 +60,7 @@ function App() {
     // --- App-level State ---
     const [session, setSession] = useState<Session | null>(null);
     const [authError, setAuthError] = useState<string | null>(null);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [dataLoadingStatus, setDataLoadingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
     // --- User-Specific Data State ---
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -100,11 +98,49 @@ function App() {
     const [newlyCreatedSopId, setNewlyCreatedSopId] = useState<string | null>(null);
     const [analysisModalState, setAnalysisModalState] = useState<AnalysisModalState>({ isOpen: false, result: null, professor: null });
 
+     // This function is now responsible for the entire data loading process and can be called to retry.
+    const loadAndInitializeUserData = async () => {
+        if (!session?.user?.email) return;
+
+        setDataLoadingStatus('loading');
+        setError(null);
+
+        try {
+            const email = session.user.email;
+            const existingData = await dataService.getUserData(email);
+
+            if (existingData) {
+                const userProfiles = existingData.profiles || [];
+                const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
+                    ? existingData.activeProfileId
+                    : (userProfiles.length > 0 ? userProfiles[0].id : null);
+                
+                setProfiles(userProfiles);
+                setActiveProfileId(userActiveProfileId);
+                setSavedProfessors(existingData.savedProfessors || []);
+                setSavedPrograms(existingData.savedPrograms || []);
+                setSops(existingData.sops || []);
+            } else {
+                // This is a new user or a user with no data. Set empty state.
+                setProfiles([]);
+                setActiveProfileId(null);
+                setSavedProfessors([]);
+                setSavedPrograms([]);
+                setSops([]);
+            }
+            setDataLoadingStatus('success');
+        } catch (e: any) {
+            console.error("Fatal error: Could not load user data.", e);
+            setError(`Could not load your profile due to a database error. Please check your connection or refresh the page. Details: ${e.message}`);
+            setDataLoadingStatus('error');
+        }
+    };
+
+
     // --- Supabase Session Management ---
     useEffect(() => {
         dataService.getSession().then(({ data: { session } }) => {
           setSession(session);
-          setIsInitialLoad(false); 
         });
     
         const { data: { subscription } } = dataService.onAuthStateChange((_event, session) => {
@@ -116,76 +152,37 @@ function App() {
 
     // --- Data Synchronization ---
     useEffect(() => {
-        if (!session?.user?.email) {
+        if (session?.user?.email) {
+            loadAndInitializeUserData();
+        } else {
+            // User is logged out or session is null. Clear all data from state.
             setProfiles([]);
             setActiveProfileId(null);
             setSavedProfessors([]);
             setSavedPrograms([]);
             setSops([]);
-            return;
+            setDataLoadingStatus('idle');
         }
-
-        let isMounted = true;
-        
-        const loadAndInitializeUserData = async () => {
-            try {
-                const email = session.user!.email!;
-                const existingData = await dataService.getUserData(email);
-
-                if (!isMounted) return;
-
-                if (existingData) {
-                    const userProfiles = existingData.profiles || [];
-                    const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
-                        ? existingData.activeProfileId
-                        : (userProfiles.length > 0 ? userProfiles[0].id : null);
-                    
-                    setProfiles(userProfiles);
-                    setActiveProfileId(userActiveProfileId);
-                    setSavedProfessors(existingData.savedProfessors || []);
-                    setSavedPrograms(existingData.savedPrograms || []);
-                    setSops(existingData.sops || []);
-                } else {
-                    // **THE FIX**: This is the new, safe logic.
-                    // If no data is found, do NOT create a default profile automatically.
-                    // Instead, set an empty state. The UI (`ProfileForm`) will now
-                    // prompt the user to create their first profile, making the
-                    // action explicit and preventing accidental data overwrites.
-                    setProfiles([]);
-                    setActiveProfileId(null);
-                    setSavedProfessors([]);
-                    setSavedPrograms([]);
-                    setSops([]);
-                }
-            } catch (e: any) {
-                console.error("Fatal error: Could not load user data.", e);
-                setError(`Could not load your profile due to a database error. Please check your connection and refresh. Details: ${e.message}`);
-            }
-        };
-
-        loadAndInitializeUserData();
-
-        return () => { isMounted = false; };
     }, [session]);
 
 
     // Save data back to the data service whenever it changes for the logged-in user
     useEffect(() => {
-        if (isInitialLoad || !session?.user?.email) return;
-        
-        // This safeguard prevents saving an empty state during the initial login/load flicker,
-        // but the main data loss prevention is now in the data loading useEffect.
-        // We only save if there is at least one profile, which is now only created via user action.
-        if (profiles.length === 0 && activeProfileId === null) {
-            // This is a valid state for a new user, but we don't want to save "nothing"
-            // over potentially existing data if there was a load flicker.
-            // The first save will happen when the first profile is created.
+        // CRITICAL: Only save data if loading was successful and the user is logged in.
+        // This prevents overwriting data during login or after a loading error.
+        if (dataLoadingStatus !== 'success' || !session?.user?.email) {
+            return;
+        }
+
+        // Additional safeguard to prevent saving a completely empty state.
+        // The first save will only happen after a user creates their first profile.
+        if (profiles.length === 0 && activeProfileId === null && savedProfessors.length === 0 && savedPrograms.length === 0 && sops.length === 0) {
             return;
         }
 
         const currentDataInState: UserData = { profiles, activeProfileId, savedProfessors, savedPrograms, sops };
         dataService.saveUserData(session.user.email, currentDataInState);
-    }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, session, isInitialLoad]);
+    }, [profiles, activeProfileId, savedProfessors, savedPrograms, sops, session, dataLoadingStatus]);
 
     // --- Derived State ---
     const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId) || null, [profiles, activeProfileId]);
@@ -207,8 +204,6 @@ function App() {
         const { error } = await dataService.signIn(email, pass);
         if (error) {
             setAuthError(error.message);
-        } else {
-            // Let the data sync useEffect handle setting the correct view
         }
     };
 
@@ -219,7 +214,7 @@ function App() {
         if (error) {
             setAuthError(error.message);
         } else {
-            setActiveView('profile'); // New user should be directed to profile creation
+            setActiveView('profile'); 
         }
     };
     
@@ -228,13 +223,8 @@ function App() {
         if (error) {
             console.error('Error logging out:', error.message);
         }
-        setSession(null); 
-        setProfiles([]);
-        setActiveProfileId(null);
-        setSavedProfessors([]);
-        setSavedPrograms([]);
-        setSops([]);
-        setActiveView('home');
+        // The onAuthStateChange listener will detect the session change to null,
+        // which will trigger the data synchronization useEffect to clear all state.
     };
 
     const handleSaveAnalysisToProfessor = (profToSave: ProfessorProfile | ProfessorRecommendation | SavedProfessor, result: AnalysisResult) => {
@@ -404,28 +394,29 @@ function App() {
             setNewlyCreatedSopId(newSop.id);
         } catch (e: any) { setError(e.message || "Failed to generate SOP."); } finally { setIsSopLoading(false); }
     }
-
-    if (isInitialLoad) {
-        return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <p>Loading...</p>
-            </div>
-        );
-    }
     
     if (!session) {
         return <Login onLogin={handleLogin} onSignUp={handleSignUp} error={authError} />;
     }
 
-    if (error) {
+    if (dataLoadingStatus === 'loading' || dataLoadingStatus === 'idle') {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center text-primary">
+                <Spinner />
+                <p className="ml-4 text-muted-foreground">Loading your profile...</p>
+            </div>
+        );
+    }
+
+    if (dataLoadingStatus === 'error') {
         return (
              <div className="min-h-screen bg-background flex items-center justify-center p-4">
                 <Card className="max-w-md text-center bg-destructive/10 border-destructive/20">
-                    <h2 className="text-xl font-bold text-destructive">An Error Occurred</h2>
+                    <h2 className="text-xl font-bold text-destructive">Failed to Load Profile</h2>
                     <p className="mt-2 text-destructive/80">{error}</p>
-                    <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-destructive text-destructive-foreground rounded-md">
-                        Refresh Page
-                    </button>
+                    <Button onClick={loadAndInitializeUserData} className="mt-4" variant="secondary">
+                        Try Again
+                    </Button>
                 </Card>
             </div>
         )
