@@ -84,6 +84,7 @@ export function onAuthStateChange(callback: (event: string, session: import('@su
  * Fetches the data payload for a specific user from the 'user_data' table.
  * @param email The user's email.
  * @returns A promise that resolves to the UserData or null if not found.
+ * @throws {AuthError} If a database or network error occurs.
  */
 export async function getUserData(email: string): Promise<UserData | null> {
     const supabase = getSupabase();
@@ -95,9 +96,16 @@ export async function getUserData(email: string): Promise<UserData | null> {
         .eq('user_email', email)
         .single();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116: "object not found" - this is expected if user has no data yet
+    if (error) {
+        // 'PGRST116' is the code for "object not found". This is an expected
+        // outcome for a new user and should not be treated as an error.
+        if (error.code === 'PGRST116') {
+            return null;
+        }
+        // For any other error (network, permissions, etc.), we must throw it
+        // so the UI can catch it and prevent data-destroying actions.
         console.error("Error fetching user data:", error);
-        return null;
+        throw error;
     }
 
     return data ? data.data : null;

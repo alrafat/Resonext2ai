@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { UserProfile, ProfessorProfile, AnalysisResult, AppView, SavedProfessor, TieredUniversities, ProfessorRecommendation, Sop, ProgramDiscoveryResult, ProgramDetails, SavedProgram, UniversityWithPrograms, UserData } from './types';
@@ -22,6 +23,8 @@ import { DiscoverView } from './components/DiscoverView';
 import { GenerateView } from './components/GenerateView';
 import { DiscoveryStage } from './components/DiscoveryTab';
 import { ConfigurationSetup } from './components/ConfigurationSetup';
+// FIX: Add missing import for Card component
+import { Card } from './components/ui/Card';
 
 
 const createNewProfile = (name: string): UserProfile => ({
@@ -100,7 +103,6 @@ function App() {
     useEffect(() => {
         dataService.getSession().then(({ data: { session } }) => {
           setSession(session);
-          // Set initial load to false after first session check to prevent saving default data
           setIsInitialLoad(false); 
         });
     
@@ -112,10 +114,8 @@ function App() {
     }, []);
 
     // --- Data Synchronization ---
-    // This is the single source of truth for loading, initializing, and clearing data based on session state.
     useEffect(() => {
         if (!session?.user?.email) {
-            // User is logged out, clear all user-specific state.
             setProfiles([]);
             setActiveProfileId(null);
             setSavedProfessors([]);
@@ -127,43 +127,43 @@ function App() {
         let isMounted = true;
         
         const loadAndInitializeUserData = async () => {
-            const email = session.user!.email!;
-            const existingData = await dataService.getUserData(email);
+            try {
+                const email = session.user!.email!;
+                const existingData = await dataService.getUserData(email);
 
-            if (!isMounted) return;
+                if (!isMounted) return;
 
-            if (existingData) {
-                // User has a data row, load their data as-is.
-                const userProfiles = existingData.profiles || [];
-                const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
-                    ? existingData.activeProfileId
-                    : (userProfiles.length > 0 ? userProfiles[0].id : null);
-                
-                setProfiles(userProfiles);
-                setActiveProfileId(userActiveProfileId);
-                setSavedProfessors(existingData.savedProfessors || []);
-                setSavedPrograms(existingData.savedPrograms || []);
-                setSops(existingData.sops || []);
-            } else {
-                // This is a brand new user (no data row found). Create and save their initial profile.
-                // This is the ONLY place this should happen to prevent data overwrites.
-                const firstProfile = createNewProfile('Default Profile');
-                const initialUserData: UserData = {
-                    profiles: [firstProfile],
-                    activeProfileId: firstProfile.id,
-                    savedProfessors: [],
-                    savedPrograms: [],
-                    sops: [],
-                };
-                
-                setProfiles(initialUserData.profiles);
-                setActiveProfileId(initialUserData.activeProfileId);
-                setSavedProfessors(initialUserData.savedProfessors);
-                setSavedPrograms(initialUserData.savedPrograms);
-                setSops(initialUserData.sops);
-
-                // Save the initial structure to the database.
-                await dataService.saveUserData(email, initialUserData);
+                if (existingData) {
+                    const userProfiles = existingData.profiles || [];
+                    const userActiveProfileId = existingData.activeProfileId && userProfiles.some(p => p.id === existingData.activeProfileId)
+                        ? existingData.activeProfileId
+                        : (userProfiles.length > 0 ? userProfiles[0].id : null);
+                    
+                    setProfiles(userProfiles);
+                    setActiveProfileId(userActiveProfileId);
+                    setSavedProfessors(existingData.savedProfessors || []);
+                    setSavedPrograms(existingData.savedPrograms || []);
+                    setSops(existingData.sops || []);
+                } else {
+                    const firstProfile = createNewProfile('Default Profile');
+                    const initialUserData: UserData = {
+                        profiles: [firstProfile],
+                        activeProfileId: firstProfile.id,
+                        savedProfessors: [],
+                        savedPrograms: [],
+                        sops: [],
+                    };
+                    
+                    setProfiles(initialUserData.profiles);
+                    setActiveProfileId(initialUserData.activeProfileId);
+                    setSavedProfessors(initialUserData.savedProfessors);
+                    setSavedPrograms(initialUserData.savedPrograms);
+                    setSops(initialUserData.sops);
+                    await dataService.saveUserData(email, initialUserData);
+                }
+            } catch (e: any) {
+                console.error("Fatal error: Could not load user data.", e);
+                setError(`Could not load your profile due to a database error. Please check your connection and refresh. Details: ${e.message}`);
             }
         };
 
@@ -175,12 +175,13 @@ function App() {
 
     // Save data back to the data service whenever it changes for the logged-in user
     useEffect(() => {
-        // Prevent saving during initial auth check or if user is logged out.
         if (isInitialLoad || !session?.user?.email) return;
-
-        // Prevent saving an empty/default state right after login before real data is loaded.
-        // This is a safeguard; the main data-loading useEffect should handle this, but this adds robustness.
-        if (profiles.length === 0 && savedProfessors.length === 0 && savedPrograms.length === 0) {
+        
+        // This is a critical safeguard. We should only save if we know for a fact
+        // that data has been loaded. A simple way is to check if profiles exist.
+        // A user can have 0 professors/programs, but must have at least one profile.
+        // The data-loading useEffect ensures this.
+        if (profiles.length === 0) {
             return;
         }
 
@@ -204,25 +205,23 @@ function App() {
     // --- Handlers ---
     const handleLogin = async (email: string, pass: string) => {
         setAuthError(null);
+        setError(null);
         const { error } = await dataService.signIn(email, pass);
         if (error) {
             setAuthError(error.message);
         } else {
-            // Data loading is now handled entirely by the session useEffect
             const userData = await dataService.getUserData(email);
-            // On successful login, check if a profile exists to direct the user.
             setActiveView(userData && userData.profiles.length > 0 ? 'home' : 'profile');
         }
     };
 
     const handleSignUp = async (fullName: string, email: string, pass: string) => {
         setAuthError(null);
+        setError(null);
         const { error } = await dataService.signUp(email, pass, { fullName });
         if (error) {
             setAuthError(error.message);
         } else {
-            // After sign up, the session will change, and the useEffect will create the initial profile.
-            // Direct the new user to the profile page to start filling it out.
             setActiveView('profile');
         }
     };
@@ -232,8 +231,6 @@ function App() {
         if (error) {
             console.error('Error logging out:', error.message);
         }
-        // Explicitly clear state for a faster, more reliable UI update on logout.
-        // The onAuthStateChange listener will also fire, but this guarantees responsiveness.
         setSession(null); 
         setProfiles([]);
         setActiveProfileId(null);
@@ -414,7 +411,6 @@ function App() {
     if (isInitialLoad) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
-                {/* You can add a more sophisticated loading spinner here */}
                 <p>Loading...</p>
             </div>
         );
@@ -422,6 +418,20 @@ function App() {
     
     if (!session) {
         return <Login onLogin={handleLogin} onSignUp={handleSignUp} error={authError} />;
+    }
+
+    if (error) {
+        return (
+             <div className="min-h-screen bg-background flex items-center justify-center p-4">
+                <Card className="max-w-md text-center bg-destructive/10 border-destructive/20">
+                    <h2 className="text-xl font-bold text-destructive">An Error Occurred</h2>
+                    <p className="mt-2 text-destructive/80">{error}</p>
+                    <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-destructive text-destructive-foreground rounded-md">
+                        Refresh Page
+                    </button>
+                </Card>
+            </div>
+        )
     }
     
     // --- View Props ---
